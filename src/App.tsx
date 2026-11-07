@@ -4,35 +4,20 @@ import {
   COLOR_ACCENTS, DEFAULT_APPEARANCE, THEMES, getTheme, paletteVars,
   readAppearance, type Appearance, type AppearanceMode, type FontChoice,
 } from "./theme";
+import RecipePage from "./RecipePage";
+import {
+  RULE_CATALOG, labelForRule, lossyRule, recipeNeedsKey,
+  type Recipe, type RecipeResult, type StageOutput, type Reconstruction,
+  type RecoveryWord, type WordChoice,
+} from "./recipeTypes";
 import "./App.css";
 
-type Page = "workbench" | "appearance" | "general" | "about";
+type Page = "workbench" | "recipes" | "appearance" | "general" | "about";
 type Direction = "encode" | "decode";
-type Encoded = { ciphertext: string; intermediate: string; words: number; phonemes: number };
-type RecoveryWord = {
-  transformed: string;
-  suggested: string;
-  alternatives: string[];
-  compatibleCount: number;
-};
-type Reconstruction = {
-  suggested: string | null;
-  words: RecoveryWord[];
-  note: string;
-};
-type Decoded = { intermediate: string; reconstruction: Reconstruction };
-type WordChoice = { index: number; candidate: string };
-
 function wordOptions(word: RecoveryWord): string[] {
   return Array.from(new Set([word.suggested, ...word.alternatives]));
 }
 
-const STAGES = [
-  { title: "Pronunciation lookup", detail: "Resolve dictionary-supported US-English phonemes", reversible: false },
-  { title: "Rotating sound families", detail: "Choose key-derived spellings for each consonant phoneme", reversible: false },
-  { title: "Vowel-run collapse", detail: "Merge consecutive vowel phonemes into a rotating vowel", reversible: false },
-  { title: "Position-dependent shift", detail: "Shift letters using word index, letter index and passphrase", reversible: true },
-];
 function frequencies(input: string): number[] {
   const counts = Array(26).fill(0) as number[];
   for (const ch of input.toLowerCase()) if (ch >= "a" && ch <= "z") counts[ch.charCodeAt(0) - 97]++;
@@ -52,6 +37,11 @@ function App() {
   const [output, setOutput] = useState("");
   const [intermediate, setIntermediate] = useState("");
   const [reconstruction, setReconstruction] = useState<Reconstruction | null>(null);
+  const [builtins, setBuiltins] = useState<Recipe[]>([]);
+  const [saved, setSaved] = useState<Recipe[]>([]);
+  const [activeRecipe, setActiveRecipe] = useState<Recipe | null>(null);
+  const [stageOutputs, setStageOutputs] = useState<StageOutput[]>([]);
+  const [exactOutput, setExactOutput] = useState(false);
   const [lockedChoices, setLockedChoices] = useState<WordChoice[]>([]);
   const [selectedWord, setSelectedWord] = useState<number | null>(null);
   const [choosing, setChoosing] = useState(false);
@@ -69,11 +59,36 @@ function App() {
   useEffect(() => {
     localStorage.setItem("crypto-playground-appearance-v1", JSON.stringify(appearance));
   }, [appearance]);
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      invoke<Recipe[]>("builtin_recipes"),
+      invoke<Recipe[]>("list_saved_recipes"),
+    ]).then(([installed, local]) => {
+      if (!active) return;
+      setBuiltins(installed);
+      setSaved(local);
+      const id = localStorage.getItem("crypto-playground-active-recipe-v1");
+      setActiveRecipe([...installed, ...local].find(r => r.id === id) ?? installed[0] ?? null);
+    }).catch(error => {
+      if (active) setMessage("Could not load recipe library: " + String(error));
+    });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (activeRecipe) localStorage.setItem("crypto-playground-active-recipe-v1", activeRecipe.id);
+  }, [activeRecipe]);
 
   const mode = appearance.mode === "system" ? (systemDark ? "dark" : "light") : appearance.mode;
   const theme = getTheme(mode === "light" ? appearance.lightTheme : appearance.darkTheme, mode);
   const style = paletteVars(theme, appearance);
   const availableThemes = THEMES.filter(t => t.variant === mode);
+  const needsKey = recipeNeedsKey(activeRecipe);
+  const stages = activeRecipe?.steps.filter(step => step.enabled).map(step => ({
+    title: labelForRule(step.rule),
+    detail: RULE_CATALOG.find(entry => entry.type === step.rule.type)?.detail ?? "",
+    reversible: !lossyRule(step.rule),
+  })) ?? [];
   const source = direction === "encode" ? plaintext : ciphertext;
   const inspectText = inspected === "intermediate" ? intermediate : output;
   const bars = useMemo(() => frequencies(inspectText), [inspectText]);
@@ -86,48 +101,54 @@ function App() {
     operationId.current += 1;
     setOutput(""); setIntermediate(""); setReconstruction(null);
     setLockedChoices([]); setSelectedWord(null); setChoosing(false);
+    setStageOutputs([]); setExactOutput(false);
     setDetail(""); setMessage("");
   }
   async function run() {
-    if (busy || choosing) return;
+    if (busy || choosing || !activeRecipe) return;
     const operation = ++operationId.current;
     setBusy(true); setChoosing(false); setMessage("");
     try {
+      const result = await invoke<RecipeResult>("evaluate_recipe", {
+        recipe: activeRecipe, text: source, key: passphrase, direction, choices: [],
+      });
+      if (operation !== operationId.current) return;
+      setOutput(result.output);
+      setReconstruction(result.reconstruction);
+      setLockedChoices([]); setSelectedWord(null);
+      setStageOutputs(result.stages);
+      setExactOutput(result.exact);
       if (direction === "encode") {
-        const result = await invoke<Encoded>("encode_message", { text: plaintext, key: passphrase });
-        if (operation !== operationId.current) return;
-        setOutput(result.ciphertext);
-        setReconstruction(null);
-        setLockedChoices([]); setSelectedWord(null);
-        setCiphertext(result.ciphertext);
-        setIntermediate(result.intermediate);
+        setCiphertext(result.output);
+        const beforeLast = result.stages.length > 1
+          ? result.stages[result.stages.length - 2].text
+          : result.intermediate;
+        setIntermediate(beforeLast);
         setInspected("intermediate");
-        setDetail(String(result.words) + " words / " + String(result.phonemes) + " phonemes");
-        setMessage("Encoded successfully.");
       } else {
-        const result = await invoke<Decoded>("decode_message", { ciphertext, key: passphrase });
-        if (operation !== operationId.current) return;
-        setLockedChoices([]); setSelectedWord(null);
-        setOutput(result.reconstruction.suggested ?? "");
         setIntermediate(result.intermediate);
-        setReconstruction(result.reconstruction);
         setInspected("ciphertext");
-        setDetail(result.reconstruction.note);
-        setMessage(result.reconstruction.suggested
-          ? "Shift reversed; English is only a suggested reconstruction."
-          : "Shift reversed, but no English reconstruction could be verified against the phonetic rules.");
       }
+      setDetail(result.note);
+      setMessage(result.exact
+        ? (direction === "encode" ? "Reversible recipe encoded." : "Decoded exactly.")
+        : direction === "encode"
+          ? "Lossy recipe encoded."
+          : result.reconstruction?.suggested
+            ? "The English text is a speculative reconstruction."
+            : "Recovered the surviving layer; no compatible English suggestion.");
     } catch (error) {
       if (operation !== operationId.current) return;
-      setOutput(""); setIntermediate(""); setReconstruction(null); setDetail("");
-      setMessage(String(error));
+      setOutput(""); setIntermediate(""); setReconstruction(null);
+      setStageOutputs([]); setExactOutput(false);
+      setDetail(""); setMessage(String(error));
     } finally {
       if (operation === operationId.current) setBusy(false);
     }
   }
 
   async function reviseChoices(next: WordChoice[], changed?: WordChoice) {
-    if (!reconstruction || direction !== "decode" || choosing || busy) return;
+    if (!reconstruction || !activeRecipe || direction !== "decode" || choosing || busy) return;
     const operation = ++operationId.current;
     const previousOutput = output;
     const previousReconstruction = reconstruction;
@@ -142,14 +163,15 @@ function App() {
         index === changed.index ? changed.candidate : word.suggested).join(" "));
     }
     try {
-      const result = await invoke<Decoded>("choose_reconstruction", {
-        ciphertext, key: passphrase, choices: next,
+      const result = await invoke<RecipeResult>("evaluate_recipe", {
+        recipe: activeRecipe, text: ciphertext, key: passphrase, direction: "decode", choices: next,
       });
       if (operation !== operationId.current) return;
-      if (!result.reconstruction.suggested) throw new Error("No compatible English reconstruction was found.");
+      if (!result.reconstruction?.suggested) throw new Error("No compatible English reconstruction was found.");
       if (result.intermediate !== intermediate) throw new Error("The recovered intermediate changed unexpectedly.");
       setOutput(result.reconstruction.suggested);
       setReconstruction(result.reconstruction);
+      setStageOutputs(result.stages);
       setLockedChoices(next);
       setDetail(result.reconstruction.note);
       setInspected("ciphertext");
@@ -175,6 +197,23 @@ function App() {
     }
     void reviseChoices(next, previous?.candidate === candidate ? undefined : { index, candidate });
   }
+  function activateRecipe(recipe: Recipe) {
+    clearResults();
+    setActiveRecipe(recipe);
+    setPage("workbench");
+    setMessage("Recipe selected: " + recipe.name);
+  }
+  async function saveRecipe(recipe: Recipe): Promise<Recipe> {
+    const result = await invoke<Recipe>("save_recipe", { recipe });
+    setSaved(existing => [result, ...existing.filter(item => item.id !== result.id)]);
+    activateRecipe(result);
+    return result;
+  }
+  async function deleteRecipe(id: string): Promise<void> {
+    await invoke<void>("delete_saved_recipe", { id });
+    setSaved(existing => existing.filter(item => item.id !== id));
+    if (activeRecipe?.id === id) activateRecipe(builtins[0]);
+  }
   async function copy(value: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -198,7 +237,7 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const navItems: Array<{ page: Exclude<Page, "workbench">; title: string; icon: string }> = [
+  const navItems: Array<{ page: Exclude<Page, "workbench" | "recipes">; title: string; icon: string }> = [
     { page: "general", title: "General", icon: "⚙" },
     { page: "appearance", title: "Appearance", icon: "☼" },
     { page: "about", title: "About", icon: "ⓘ" },
@@ -208,14 +247,16 @@ function App() {
       <header className="topbar">
         <div className="brand"><span className="brand-icon">⌁</span><strong>Cryptography Playground</strong><span className="brand-division">/ Notebook Lab</span></div>
         <div className="top-controls">
-          <span className="recipe-name">Recipe 001 — Phonetic Rotation</span>
-          <button className="top-run" onClick={() => void run()} disabled={!source.trim() || !passphrase.trim() || busy || choosing}>▶ {busy ? "Running" : "Run"}</button>
+          <span className="recipe-name">{activeRecipe?.name ?? "Loading recipes…"}</span>
+          <button className="top-run" onClick={() => void run()} disabled={!activeRecipe || !source.trim() || (needsKey && !passphrase.trim()) || busy || choosing}>▶ {busy ? "Running" : "Run"}</button>
           <button onClick={() => setPage("appearance")} aria-label="Appearance settings" title="Appearance settings">⚙</button>
         </div>
       </header>
       <div className="app-flex">
         <nav className="icon-rail" aria-label="Primary navigation">
           <button title="Workbench" aria-label="Workbench" className={page === "workbench" ? "active" : ""} onClick={() => setPage("workbench")}>▤</button>
+          <button title="Recipes" aria-label="Recipes" className={page === "recipes" ? "active" : ""}
+            onClick={() => setPage("recipes")}>▦</button>
           <button title="Appearance" aria-label="Appearance" className={page === "appearance" ? "active" : ""} onClick={() => setPage("appearance")}>◐</button>
           <div className="spacer" />
           <button title="About" aria-label="About" className={page === "about" ? "active" : ""} onClick={() => setPage("about")}>ⓘ</button>
@@ -223,10 +264,12 @@ function App() {
         {page === "workbench" ? (
           <main className="workbench">
             <aside className="source-sidebar">
-              <div className="sidebar-title"><h2>Experiment</h2><small>001 · unsaved</small></div>
+              <div className="sidebar-title"><h2>Experiment</h2>
+                <button className="recipe-change" onClick={() => setPage("recipes")}>{activeRecipe?.name ?? "Choose a recipe"} ↗</button>
+              </div>
               <label className="input-caption" htmlFor="operation-mode">Direction</label>
               <select id="operation-mode" value={direction} onChange={e => { setDirection(e.target.value as Direction); clearResults(); }}>
-                <option value="encode">Encode plaintext</option><option value="decode">Decode / reconstruct English</option>
+                <option value="encode">Encode plaintext</option><option value="decode">{stages.every(s => s.reversible) ? "Decode exactly" : "Decode / reconstruct English"}</option>
               </select>
               <label htmlFor="source-input" className="input-caption">{direction === "encode" ? "Plaintext" : "Ciphertext"}</label>
               <textarea id="source-input" rows={8} spellCheck={false} value={source} onChange={e => {
@@ -234,27 +277,35 @@ function App() {
                 else setCiphertext(e.target.value);
                 clearResults();
               }} placeholder="Enter text" />
-              <label className="input-caption" htmlFor="passphrase">Passphrase</label>
+              <label className="input-caption" htmlFor="passphrase">Passphrase {needsKey ? "(required)" : "(unused)"}</label>
               <input id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
                 onChange={e => { setPassphrase(e.target.value); clearResults(); }} />
-              <p className="helper-text">The current prototype accepts a manually selected letter-only key.</p>
-              <button className="sidebar-run" onClick={() => void run()} disabled={busy || choosing || !source.trim() || !passphrase.trim()}>▶ {direction === "encode" ? "Encode" : "Decode / suggest English"}</button>
+              <p className="helper-text">{needsKey
+                ? "This recipe derives a shift or phonetic rotation from your key."
+                : "This recipe has no keyed rule; the passphrase is ignored."}</p>
+              <button className="sidebar-run" onClick={() => void run()} disabled={!activeRecipe || busy || choosing || !source.trim() || (needsKey && !passphrase.trim())}>▶ {direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
               <div className="sidebar-note">
                 <strong>Experimental only</strong>
-                <p>The lossy recipe cannot restore the exact original English. Never use it for real data security.</p>
+                <p>{stages.some(s => !s.reversible)
+                  ? "This recipe discards information. English reconstruction is speculative."
+                  : "This recipe is reversible on supported ASCII input."}
+                  Never use experimental recipes for protecting sensitive data.</p>
               </div>
             </aside>
             <section className="notebook">
-              <div className="notebook-tabs"><span className="active">◈ Phonetic Rotation / 001</span></div>
+              <div className="notebook-tabs"><span className="active">◈ {activeRecipe?.name ?? "Choose a recipe"}</span>
+                <button onClick={() => setPage("recipes")}>Edit rules</button></div>
               <article className="notebook-page">
                 <div className="punch-holes" aria-hidden="true">◦<span>◦</span><span>◦</span></div>
-                <h1>Experiment: Phonetic Rotation</h1>
-                <div className="meta-line"><span>Recipe 001</span><span>phonetics</span><span>lossy</span><span>keyed shift</span></div>
+                <h1>Experiment: {activeRecipe?.name ?? "Loading"}</h1>
+                <div className="meta-line"><span>{activeRecipe?.id ?? "loading"}</span>
+                  <span>{stages.length} rules</span>
+                  <span>{stages.some(s => !s.reversible) ? "lossy" : "reversible"}</span></div>
                 <h2>Goal</h2>
-                <p>Explore how pronunciation-based collapse makes the intermediate text ambiguous before it is hidden behind a reversible positional shift.</p>
+                <p>{activeRecipe?.description ?? "Pick a recipe from the library to get started."}</p>
                 <h2>Recipe · transformation sequence</h2>
                 <ol className="stage-list">
-                  {STAGES.map((stage, i) => (
+                  {stages.map((stage, i) => (
                     <li key={stage.title}>
                       <span className="stage-index">{String(i + 1).padStart(2, "0")}</span>
                       <div><strong>{stage.title}</strong><p>{stage.detail}</p></div>
@@ -264,9 +315,9 @@ function App() {
                 </ol>
                 <h2>Transformation results</h2>
                 <div className="result-grid">
-                  <div><h3>{direction === "encode" ? "Phonetic intermediate" : "Exact recovered intermediate"}</h3><pre id="intermediate-result">{intermediate || "Run the recipe to inspect the intermediate text."}</pre></div>
+                  <div><h3>{direction === "encode" ? "Last intermediate stage" : (exactOutput ? "Decoded text" : "Exact surviving intermediate")}</h3><pre id="intermediate-result">{intermediate || "Run the recipe to inspect the intermediate text."}</pre></div>
                   <div>
-                    <h3>{direction === "encode" ? "Final ciphertext" : "Suggested English (not verified)"}</h3>
+                    <h3>{direction === "encode" ? "Final ciphertext" : exactOutput ? "Exact decoded plaintext" : "Suggested English (not verified)"}</h3>
                     {direction === "decode" && reconstruction?.suggested &&
                       output === reconstruction.suggested &&
                       reconstruction.words.length === output.split(/\s+/).length ? (
@@ -287,7 +338,7 @@ function App() {
                         ))}
                       </div>
                     ) : (
-                      <pre id="cipher-result">{output || (direction === "decode" && intermediate ? "No compatible English suggestion found." : "No result yet.")}</pre>
+                      <pre id="cipher-result">{output || (direction === "decode" && intermediate && !exactOutput ? "No compatible English suggestion found." : "No result yet.")}</pre>
                     )}
                     {direction === "decode" && selectedWord !== null &&
                       reconstruction?.words[selectedWord] && (
@@ -310,7 +361,7 @@ function App() {
                         <small>Selections are checked against the rest of the message.</small>
                       </div>
                     )}
-                    {direction === "decode" && intermediate && (
+                    {direction === "decode" && intermediate && reconstruction && (
                       <>
                         <p className="reconstruction-warning">Click an underlined word in the English suggestion, or choose a candidate in the inspector. Each selection is checked against the full phonetic rotation; the original English still cannot be proven.</p>
                         <label htmlFor="english-edit" className="english-edit-label">Manual interpretation (candidate selections replace manual edits)</label>
@@ -321,6 +372,15 @@ function App() {
                     )}
                   </div>
                 </div>
+                {stageOutputs.length > 0 && (
+                  <details className="recipe-stage-details">
+                    <summary>Inspect {stageOutputs.length} executed rule stages</summary>
+                    {stageOutputs.map((stage, i) => (
+                      <div key={i}><strong>{stage.label} · {stage.lossy ? "LOSS" : "REV"}</strong>
+                        <pre>{stage.text}</pre></div>
+                    ))}
+                  </details>
+                )}
                 <div className="notebook-actions">
                   <span>{choosing ? "Rechecking the selected words and subsequent rotations…" : (detail || "No run recorded")}</span>
                   {direction === "decode" && lockedChoices.length > 0 && (
@@ -382,9 +442,17 @@ function App() {
                   ))}
                 </div>
               )}
-              <div className="inspector-block"><h3>Reversibility</h3><p>The shift is reversible with the key. Phonetic normalization and vowel runs are lossy; the English suggestion is speculative, even when re-encoding a candidate matches.</p></div>
+                <div className="inspector-block"><h3>Reversibility</h3>
+                  <p>{exactOutput ? "All enabled rules reverse exactly on supported ASCII input."
+                    : "This recipe contains a lossy rule. Any English suggestion is speculative, even when its encoding matches."}</p>
+                </div>
             </aside>
           </main>
+        ) : page === "recipes" ? (
+          <RecipePage builtins={builtins} saved={saved} active={activeRecipe}
+            busy={busy || choosing} onActivate={activateRecipe}
+            onSave={saveRecipe} onDelete={deleteRecipe} onNotice={setMessage}
+            onWorkbench={() => setPage("workbench")} />
         ) : (
           <main className="settings-layout">
             <aside className="settings-nav">
@@ -476,13 +544,13 @@ function App() {
               ) : page === "general" ? (
                 <div className="settings-inner"><h1>General</h1><h2>Environment</h2>
                   <section className="settings-group"><div className="settings-row"><span className="setting-label">Runtime</span><span>Tauri 2 · offline desktop</span></div>
-                    <div className="settings-row"><span className="setting-label">Recipe</span><span>001 — Phonetic Rotation</span></div>
+                    <div className="settings-row"><span className="setting-label">Recipe</span><span>{activeRecipe?.name ?? "No recipe selected"}</span></div>
                     <div className="settings-row"><span className="setting-label">Preferences</span><span>Saved locally</span></div>
                   </section><p className="helper-text">No cloud account or synchronization is configured.</p>
                 </div>
               ) : (
                 <div className="settings-inner"><h1>About</h1><h2>Cryptography Playground</h2>
-                  <section className="settings-group"><div className="settings-row"><span>Current experiment</span><span>Recipe 001</span></div>
+                  <section className="settings-group"><div className="settings-row"><span>Current experiment</span><span>{activeRecipe?.name ?? "None"}</span></div>
                     <div className="settings-row"><span>Technology</span><span>Rust · React · Tauri 2</span></div>
                   </section><p className="helper-text">An independent, experimental cryptography playground. It is not suitable for protecting sensitive data.</p>
                 </div>

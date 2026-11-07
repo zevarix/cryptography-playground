@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-002",
+  "name": "Consonant Skeleton",
+  "description": "Delete vowels, collapse doubled consonants, and shift positions. Reconstruction is ambiguous.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "remove_vowels"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "collapse_doubles"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "position_shift",
+        "base": 5,
+        "keyed": false
+      }
+    }
+  ]
+}

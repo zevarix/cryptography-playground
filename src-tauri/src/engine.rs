@@ -1,5 +1,5 @@
 //! Full-inventory US-English phoneme experiment (not secure encryption).
-mod recovery;
+pub(crate) mod recovery;
 pub use recovery::WordChoice;
 use serde::Serialize;
 use std::{collections::HashMap, sync::OnceLock};
@@ -144,8 +144,7 @@ fn shift(s: &str, key: &str, undo: bool) -> Result<String, String> {
     }
     Ok(result.join(" "))
 }
-pub fn encode(plaintext: &str, passphrase: &str) -> Result<Encoded, String> {
-    let key = key(passphrase)?;
+fn phonetic_transform_impl(plaintext: &str, key: &str) -> Result<(String, usize, usize), String> {
     let words = tokens(plaintext)?;
     let mut counters: HashMap<&str, usize> = HashMap::new();
     let mut vowel_count = 0_usize;
@@ -170,7 +169,7 @@ pub fn encode(plaintext: &str, passphrase: &str) -> Result<Encoded, String> {
             } else {
                 let spellings = choices(p).ok_or_else(|| format!("Unmapped phoneme {p}"))?;
                 let count = counters.entry(p).or_default();
-                let offset = (initial(&key, p, spellings.len()) + *count) % spellings.len();
+                let offset = (initial(key, p, spellings.len()) + *count) % spellings.len();
                 result.push_str(spellings[offset]);
                 *count += 1;
                 previous_vowel = false;
@@ -179,14 +178,27 @@ pub fn encode(plaintext: &str, passphrase: &str) -> Result<Encoded, String> {
         output_words.push(result);
     }
     let intermediate = output_words.join(" ");
+    Ok((intermediate, words.len(), phonemes))
+}
+/// This is one independent lossy rule; no shifting occurs here.
+pub(crate) fn phonetic_transform(plaintext: &str, passphrase: &str) -> Result<String, String> {
+    let key = key(passphrase)?;
+    let (intermediate, _, _) = phonetic_transform_impl(plaintext, &key)?;
+    Ok(intermediate)
+}
+
+pub fn encode(plaintext: &str, passphrase: &str) -> Result<Encoded, String> {
+    let key = key(passphrase)?;
+    let (intermediate, words, phonemes) = phonetic_transform_impl(plaintext, &key)?;
     let ciphertext = shift(&intermediate, &key, false)?;
     Ok(Encoded {
         ciphertext,
         intermediate,
-        words: words.len(),
+        words,
         phonemes,
     })
 }
+
 pub fn decode(ciphertext: &str, passphrase: &str) -> Result<Decoded, String> {
     decode_with_choices(ciphertext, passphrase, &[])
 }

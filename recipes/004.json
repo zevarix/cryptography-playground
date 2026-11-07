@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-004",
+  "name": "Pair Swap + Vowel Rotation",
+  "description": "Swap voiced/unvoiced letter pairs, rotate vowels, and apply a positional shift.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "pair_swap"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "rotate_vowels",
+        "steps": 1
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "position_shift",
+        "base": 5,
+        "keyed": false
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 // Isolated frontend acceptance: the Tauri invoke bridge is mocked.
 // Rust cipher semantics and native window acceptance are tested separately.
 import assert from "node:assert/strict";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, stat, readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
@@ -10,6 +10,9 @@ import { createServer } from "vite";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifacts = resolve(root, "test-artifacts");
 await mkdir(artifacts, { recursive: true });
+const recipeFixtures = await Promise.all(["001","002","003","004"].map(async number =>
+  JSON.parse(await readFile(resolve(root, "recipes", number + ".json"), "utf8"))
+));
 const server = await createServer({
   root, configFile: resolve(root, "vite.config.ts"),
   server: { host: "127.0.0.1", port: 15423, strictPort: true },
@@ -26,43 +29,129 @@ try {
   const errors = [];
   page.on("pageerror", e => errors.push(e.message));
   page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
-  await page.addInitScript(() => {
+  await page.addInitScript((fixtures) => {
+    let saved = JSON.parse(localStorage.getItem("test-saved-recipes") ?? "[]");
     window.__TAURI_INTERNALS__ = {
       invoke: async (command, args) => {
-        if (args.key !== "spectacular") throw new Error("Test bridge: incorrect key.");
-        if (command === "encode_message") return {
-          ciphertext: "fixturecipher", intermediate: "fixtureintermediate", words: 9, phonemes: 32,
-        };
-        if (command === "decode_message" || command === "choose_reconstruction") {
-          const picked = args.choices?.find(choice => choice.index === 3)?.candidate ?? "fix";
-          if (picked === "fax") throw new Error("Candidate conflicts with the remaining rotations.");
-          if (!["fox", "fix"].includes(picked)) throw new Error("Invalid candidate.");
-          const suggested = "the quick brown " + picked + " jumps over the lazy dog";
-          const wordNames = ["the", "quick", "brown", picked, "jumps", "over", "the", "lazy", "dog"];
-          const transformed = ["the", "qwhik", "brogn", "fucc", "jammpsc", "evi", "dho", "luza", "degg"];
-          const words = wordNames.map((word, index) => ({
-            transformed: transformed[index],
-            suggested: word,
-            alternatives: index === 3 ? (picked === "fox" ? ["fix", "fax"] : ["fox", "fax"]) : [],
-            compatibleCount: index === 3 ? 3 : 1,
-          }));
+        if (command === "builtin_recipes") return fixtures;
+        if (command === "list_saved_recipes") return saved;
+        if (command === "save_recipe") {
+          saved = [args.recipe, ...saved.filter(r => r.id !== args.recipe.id)];
+          localStorage.setItem("test-saved-recipes", JSON.stringify(saved));
+          return args.recipe;
+        }
+        if (command === "delete_saved_recipe") {
+          saved = saved.filter(r => r.id !== args.id);
+          localStorage.setItem("test-saved-recipes", JSON.stringify(saved));
+          return null;
+        }
+        if (command !== "evaluate_recipe") throw new Error("Unexpected command: " + command);
+        const { recipe, direction } = args;
+        const keyRequired = recipe.steps.some(s => s.enabled &&
+          (s.rule.type === "phonetic_rotate" || (s.rule.type === "position_shift" && s.rule.keyed)));
+        if (keyRequired && args.key !== "spectacular") throw new Error("Test bridge: incorrect key.");
+        const mirror = recipe.steps.some(s => s.enabled && s.rule.type === "word_mirror");
+        const phonetic = recipe.steps.some(s => s.enabled && s.rule.type === "phonetic_rotate");
+        const skeleton = recipe.steps.some(s => s.enabled && s.rule.type === "remove_vowels");
+        if (direction === "encode") {
+          const output = mirror ? "mirrorfixture" : skeleton ? "skeletonfixture" : phonetic ? "fixturecipher" : "pairfixture";
           return {
-            intermediate: "fixtureintermediate",
-            reconstruction: {
-              suggested,
-              note: "Speculative expansion. 1 word has several valid matches.",
-              words,
-            },
+            output, intermediate: output, exact: !phonetic && !skeleton,
+            reconstruction: null,
+            note: phonetic || skeleton ? "Lossy encoding." : "Exact encoding.",
+            stages: recipe.steps.filter(s => s.enabled).map(s => ({
+              label: s.rule.type, text: s.rule.type === "phonetic_rotate" ? "fixtureintermediate" : output,
+              lossy: ["phonetic_rotate", "remove_vowels", "collapse_doubles"].includes(s.rule.type),
+            })),
           };
         }
-        throw new Error("Unexpected command: " + command);
+        if (!phonetic && !skeleton) {
+          return {
+            output: "The quick brown fox jumps over the lazy dog.", intermediate: "The quick brown fox jumps over the lazy dog.",
+            exact: true, reconstruction: null, note: "Exact reverse.",
+            stages: [{label:"Undo shift",text:"The quick brown fox jumps over the lazy dog.",lossy:false}],
+          };
+        }
+        const picked = args.choices?.find(choice => choice.index === 3)?.candidate ?? "fix";
+        if (picked === "fax") throw new Error("Candidate conflicts with remaining rotations.");
+        if (!["fox", "fix"].includes(picked)) throw new Error("Invalid candidate.");
+        const suggested = "the quick brown " + picked + " jumps over the lazy dog";
+        const words = ["the","quick","brown",picked,"jumps","over","the","lazy","dog"].map((word,index)=>({
+          transformed: ["the","qwhik","brogn","fucc","jammpsc","evi","dho","luza","degg"][index],
+          suggested:word,
+          alternatives:index===3?(picked==="fox"?["fix","fax"]:["fox","fax"]):[],
+          compatibleCount:index===3?3:1,
+        }));
+        return {
+          output:suggested, intermediate:"fixtureintermediate", exact:false,
+          reconstruction:{suggested,note:"Speculative expansion. 1 word has several valid matches.",words},
+          note:"Speculative expansion. 1 word has several valid matches.",
+          stages:[{label:"Undo shift",text:"fixtureintermediate",lossy:false}],
+        };
       },
     };
-  });
+  }, recipeFixtures);
 
   await page.goto("http://127.0.0.1:15423/", { waitUntil: "networkidle" });
   assert.equal(await page.title(), "Cryptography Playground");
   assert.match(await page.locator("h1").innerText(), /Experiment: Phonetic Rotation/);
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  const pngRecipes = resolve(artifacts, "recipe-library-and-builder.png");
+  await page.screenshot({ path: pngRecipes, fullPage: true, animations: "disabled" });
+  await page.getByRole("button", { name: /Word Mirror/ }).click();
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  await page.locator("#passphrase").fill("");
+  assert.equal(await page.getByRole("button", { name: /Encode/ }).isDisabled(), false);
+  await page.getByRole("button", { name: /Encode/ }).click();
+  assert.equal(await page.locator("#cipher-result").innerText(), "mirrorfixture");
+  await page.locator("#operation-mode").selectOption("decode");
+  await page.getByRole("button", { name: /Decode exactly/ }).click();
+  assert.equal(await page.locator("#cipher-result").innerText(), "The quick brown fox jumps over the lazy dog.");
+  assert.equal(await page.locator(".reconstruction-warning").count(), 0);
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  await page.getByRole("button", { name: "Create a new recipe" }).click();
+  await page.locator("#recipe-name").fill("My Custom Cipher");
+  await page.locator("#rule-0").selectOption("remove_vowels");
+  await page.getByRole("button", { name: "Save recipe" }).click();
+  await page.reload({ waitUntil: "networkidle" });
+  assert.match(await page.locator("h1").innerText(), /Experiment: My Custom Cipher/);
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  assert.ok(await page.getByRole("button", { name: /My Custom Cipher/ }).count() > 0);
+  await page.getByRole("button", { name: /My Custom Cipher/ }).click();
+  assert.equal(await page.locator("#rule-0").inputValue(), "remove_vowels");
+  await page.getByRole("button", { name: "Duplicate" }).click();
+  await page.getByRole("button", { name: "Add rule" }).click();
+  assert.equal(await page.locator(".recipe-step").count(), 2);
+  await page.locator("#rule-1").selectOption("position_shift");
+  await page.locator("#shift-base-1").fill("3");
+  await page.getByRole("checkbox", { name: "Use passphrase in shift 2" }).check();
+  await page.getByRole("button", { name: "Move rule 2 up" }).click();
+  assert.equal(await page.locator("#rule-0").inputValue(), "position_shift");
+  assert.equal(await page.locator("#shift-base-0").inputValue(), "3");
+  await page.getByRole("button", { name: "Save recipe" }).click();
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  assert.ok(await page.getByRole("button", { name: /My Custom Cipher \(copy\)/ }).count() > 0);
+
+  await page.getByRole("button", { name: "Import JSON" }).click();
+  const imported = {
+    schemaVersion: 1, id: "ignored-import-id", name: "Imported Mirror",
+    description: "Portable recipe import example.",
+    steps: [{ enabled: true, rule: { type: "word_mirror" } }],
+  };
+  await page.locator("#recipe-json").fill(JSON.stringify(imported));
+  await page.getByRole("button", { name: "Import and save locally" }).click();
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  await page.getByRole("button", { name: /Imported Mirror/ }).click();
+  assert.equal(await page.locator("#rule-0").inputValue(), "word_mirror");
+  page.on("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Delete saved recipe" }).click();
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: /Imported Mirror/ }).count(), 0);
+  await page.getByRole("button", { name: /Phonetic Rotation/ }).click();
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  await page.locator("#passphrase").fill("spectacular");
+  await page.locator("#operation-mode").selectOption("encode");
+
   await page.getByRole("button", { name: /Encode/ }).click();
   assert.equal(await page.locator("#cipher-result").innerText(), "fixturecipher");
   assert.equal(await page.locator("#intermediate-result").innerText(), "fixtureintermediate");
@@ -143,10 +232,11 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: ["workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: [ "recipe selection", "reversible exact decode", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
       { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
       { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },
+      { path: pngRecipes, bytes: (await stat(pngRecipes)).size },
       { path: pngDecode, bytes: (await stat(pngDecode)).size },
       { path: pngMobile, bytes: (await stat(pngMobile)).size },
     ],

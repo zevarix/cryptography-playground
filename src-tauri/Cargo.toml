@@ -30,3 +30,6 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+[dev-dependencies]
+proptest = "1.12.0"

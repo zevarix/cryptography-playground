@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-003",
+  "name": "Word Mirror",
+  "description": "Reverse the letters in each word, then apply a reversible positional shift.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "word_mirror"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "position_shift",
+        "base": 5,
+        "keyed": false
+      }
+    }
+  ]
+}
