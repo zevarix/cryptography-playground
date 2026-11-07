@@ -22,6 +22,16 @@ The current implementation is a working foundation, with a **manual passphrase**
 - Vowels, punctuation, source graphemes and capitalization are destroyed. Plaintext recovery requires inference and may have multiple solutions.
 - The exact input/output algorithm is subject to revision until the recipe reaches a versioned, reviewed specification.
 
+## Decoding and uncertainty
+
+Decode first reverses the shift to recover the intermediate exactly. The program then searches dictionary pronunciations against the current key and tracked global rotation counters to find possible original words. A bounded beam search ranks compatible phrases by an offline word-frequency heuristic. The best suggestion is **not** a confirmed plaintext; ambiguity is intrinsic because several original phoneme sequences can yield the same intermediate. Candidate alternatives are local to the chosen reconstructed prefix and may influence subsequent rotation states. Long or unknown messages may have no candidate; the exact intermediate is preserved.
+
+## Candidate selection and re-evaluation
+
+In the decoder, ambiguous words provide selectable dictionary alternatives. Each selected original word is fixed by its zero-based **word index** (not a character offset); the Rust search restarts with all pinned choices and recomputes subsequent global rotation counters. A selection is accepted only when the full reconstructed phrase, re-encoded under the supplied key, remains consistent with the recovered intermediate. A conflicting selection is rejected, the previous English suggestion remains available, and no source ciphertext or exact intermediate is changed.
+
+Only the first few ranked alternatives are displayed. A word that reproduces its local transformed representation may still fail to produce a valid full-message path when the counters advance differently. None of this resolves the fundamental ambiguity caused by lossy preprocessing.
+
 ## Roadmap
 
 - Select the longest adjective from the source text with deterministic, documented lexical rules and fallback for ambiguity.

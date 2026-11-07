@@ -1,5 +1,5 @@
-// Headless visual acceptance for the React surface. The Tauri invoke bridge is
-// deliberately mocked here; the real Rust engine is validated by cargo test.
+// Isolated frontend acceptance: the Tauri invoke bridge is mocked.
+// Rust cipher semantics and native window acceptance are tested separately.
 import assert from "node:assert/strict";
 import { mkdir, stat } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
@@ -10,101 +10,149 @@ import { createServer } from "vite";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifacts = resolve(root, "test-artifacts");
 await mkdir(artifacts, { recursive: true });
-
-let browser;
-const vite = await createServer({
-  root,
-  configFile: resolve(root, "vite.config.ts"),
-  server: { host: "127.0.0.1", port: 15421, strictPort: true },
+const server = await createServer({
+  root, configFile: resolve(root, "vite.config.ts"),
+  server: { host: "127.0.0.1", port: 15423, strictPort: true },
   logLevel: "error",
 });
+let browser;
 try {
-  await vite.listen();
+  await server.listen();
   const executablePath = process.env.CHROME_EXECUTABLE;
-  if (!executablePath) {
-    throw new Error("Set CHROME_EXECUTABLE to a dedicated Chromium-family browser executable.");
-  }
+  if (!executablePath) throw new Error("Set CHROME_EXECUTABLE to an installed Chromium-family browser.");
   browser = await chromium.launch({ headless: true, executablePath });
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 960 },
-    deviceScaleFactor: 1,
-  });
-  const page = await context.newPage();
+  const desktop = await browser.newContext({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 1 });
+  const page = await desktop.newPage();
   const errors = [];
-  page.on("pageerror", error => errors.push(error.message));
-  page.on("console", message => {
-    if (message.type() === "error") errors.push(message.text());
-  });
-
-  // A deterministic bridge stub, not a claim that the native bridge was tested.
+  page.on("pageerror", e => errors.push(e.message));
+  page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
   await page.addInitScript(() => {
     window.__TAURI_INTERNALS__ = {
-      invoke: async (command, arguments_) => {
-        if (arguments_.key !== "spectacular") {
-          throw new Error("Test bridge: incorrect key");
-        }
-        if (command === "encode_message") {
+      invoke: async (command, args) => {
+        if (args.key !== "spectacular") throw new Error("Test bridge: incorrect key.");
+        if (command === "encode_message") return {
+          ciphertext: "fixturecipher", intermediate: "fixtureintermediate", words: 9, phonemes: 32,
+        };
+        if (command === "decode_message" || command === "choose_reconstruction") {
+          const picked = args.choices?.find(choice => choice.index === 3)?.candidate ?? "fix";
+          if (picked === "fax") throw new Error("Candidate conflicts with the remaining rotations.");
+          if (!["fox", "fix"].includes(picked)) throw new Error("Invalid candidate.");
+          const suggested = "the quick brown " + picked + " jumps over the lazy dog";
+          const wordNames = ["the", "quick", "brown", picked, "jumps", "over", "the", "lazy", "dog"];
+          const transformed = ["the", "qwhik", "brogn", "fucc", "jammpsc", "evi", "dho", "luza", "degg"];
+          const words = wordNames.map((word, index) => ({
+            transformed: transformed[index],
+            suggested: word,
+            alternatives: index === 3 ? (picked === "fox" ? ["fix", "fax"] : ["fox", "fax"]) : [],
+            compatibleCount: index === 3 ? 3 : 1,
+          }));
           return {
-            ciphertext: "fixturecipher",
             intermediate: "fixtureintermediate",
-            words: 9,
-            phonemes: 32,
+            reconstruction: {
+              suggested,
+              note: "Speculative expansion. 1 word has several valid matches.",
+              words,
+            },
           };
-        }
-        if (command === "decode_message") {
-          return { intermediate: "fixtureintermediate" };
         }
         throw new Error("Unexpected command: " + command);
       },
     };
   });
 
-  await page.goto("http://127.0.0.1:15421/", { waitUntil: "networkidle" });
+  await page.goto("http://127.0.0.1:15423/", { waitUntil: "networkidle" });
   assert.equal(await page.title(), "Cryptography Playground");
-  assert.equal(await page.locator("h1").textContent(), "Turn language into a puzzle.");
-  assert.match(await page.locator("body").innerText(), /Phonetic rotation/);
-  assert.equal(await page.locator("#message").inputValue(), "The quick brown fox jumps over the lazy dog.");
-  await page.getByRole("button", { name: "Encode with Recipe 001" }).click();
-  assert.equal(await page.locator("#result").inputValue(), "fixturecipher");
-  await page.locator("details.intermediate summary").click();
-  assert.match(await page.locator("details.intermediate pre").textContent(), /fixtureintermediate/);
+  assert.match(await page.locator("h1").innerText(), /Experiment: Phonetic Rotation/);
+  await page.getByRole("button", { name: /Encode/ }).click();
+  assert.equal(await page.locator("#cipher-result").innerText(), "fixturecipher");
+  assert.equal(await page.locator("#intermediate-result").innerText(), "fixtureintermediate");
+  const pngWorkbench = resolve(artifacts, "notebook-workbench-desktop.png");
+  await page.screenshot({ path: pngWorkbench, fullPage: true, animations: "disabled" });
+  await page.locator("#operation-mode").selectOption("decode");
+  await page.getByRole("button", { name: /Decode \/ suggest English/ }).click();
+  assert.equal(await page.locator("#intermediate-result").innerText(), "fixtureintermediate");
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fix jumps over the lazy dog");
+  // Click an ambiguous word in the sentence, select a different candidate,
+  // then verify the backend results update the entire phrase and inspector.
+  await page.getByRole("button", { name: "Choose a different word for fix, word 4" }).click();
+  await page.getByRole("group", { name: "Choose word 4" }).getByRole("button", { name: "Use fox for word 4" }).click();
+  await page.waitForFunction(() =>
+    document.querySelector("#cipher-result")?.textContent?.includes("brown fox jumps"));
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
+  assert.equal(await page.locator("#intermediate-result").innerText(), "fixtureintermediate");
+  assert.equal(await page.getByRole("group", { name: "Candidates for word 4 (fucc)" })
+    .getByRole("button", { name: "Use fox for word 4" }).getAttribute("aria-pressed"), "true");
+  // A rejected alternative must roll back the visual preview, not corrupt it.
+  await page.getByRole("group", { name: "Candidates for word 4 (fucc)" })
+    .getByRole("button", { name: "Use fax for word 4" }).click();
+  await page.waitForFunction(() =>
+    document.querySelector('[role="status"]')?.textContent?.includes("Choice not applied"));
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
+  await page.getByRole("button", { name: /Reset word selections/ }).click();
+  await page.waitForFunction(() =>
+    document.querySelector("#cipher-result")?.textContent?.includes("brown fix jumps"));
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fix jumps over the lazy dog");
+  assert.match(await page.locator(".reconstruction-warning").innerText(), /cannot be proven|not verified|cannot verify/);
+  assert.match(await page.locator(".reconstruction-word").innerText(), /fox|fax/);
+  const pngDecode = resolve(artifacts, "notebook-decoder-english-suggestion.png");
+  await page.screenshot({ path: pngDecode, fullPage: true, animations: "disabled" });
+  const editableEnglish = page.getByRole("textbox", { name: "Edit suggested English" });
+  await editableEnglish.fill("the quick brown fox jumps over the lazy dog");
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
+  await page.locator("#passphrase").fill("incorrect");
+  await page.getByRole("button", { name: /Decode \/ suggest English/ }).click();
+  assert.match(await page.locator('[role="status"]').innerText(), /incorrect key/);
 
-  const desktopPath = resolve(artifacts, "desktop-1440.png");
-  await page.screenshot({ path: desktopPath, fullPage: true, animations: "disabled" });
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  assert.equal(await page.locator("h1").innerText(), "Appearance");
+  await page.getByRole("group", { name: "Appearance mode" }).getByRole("button", { name: "Dark" }).click();
+  assert.equal(await page.getByRole("group", { name: "Appearance mode" }).getByRole("button", { name: "Dark" }).getAttribute("aria-pressed"), "true");
+  await page.locator("#theme-choice").selectOption("dracula");
+  await page.getByRole("button", { name: "Accent #d79921" }).click();
+  await page.locator("#background-choice").fill("#24212c");
+  await page.locator("#font-choice").selectOption("mono");
+  assert.equal(await page.locator("#theme-choice").inputValue(), "dracula");
+  assert.equal(await page.locator(".app-root").evaluate(el => getComputedStyle(el).getPropertyValue("--app-bg").trim()), "#24212c");
+  const pngDesktop = resolve(artifacts, "notebook-appearance-desktop.png");
+  await page.screenshot({ path: pngDesktop, fullPage: true, animations: "disabled" });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  assert.equal(await page.locator("#theme-choice").inputValue(), "dracula");
+  assert.equal(await page.locator("#background-choice").inputValue(), "#24212c");
+  assert.equal(await page.locator("#font-choice").inputValue(), "mono");
+  await page.locator("details.advanced summary").click();
+  await page.getByRole("button", { name: "Reset appearance to defaults" }).click();
+  assert.equal(await page.locator("#theme-choice").inputValue(), "notebook-light");
 
-  await page.getByRole("button", { name: "Inspect in decoder" }).click();
-  assert.equal(await page.locator("#message").inputValue(), "fixturecipher");
-  await page.getByRole("button", { name: "Reverse the shift" }).click();
-  assert.equal(await page.locator("#result").inputValue(), "fixtureintermediate");
-  await page.locator("#passphrase").fill("wrong");
-  await page.getByRole("button", { name: "Reverse the shift" }).click();
-  assert.match(await page.locator('[role="alert"]').innerText(), /incorrect key/);
-
-  const mobile = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 1,
-  });
-  const mobilePage = await mobile.newPage();
-  await mobilePage.goto("http://127.0.0.1:15421/", { waitUntil: "networkidle" });
-  assert.equal(await mobilePage.locator("h1").textContent(), "Turn language into a puzzle.");
-  const overflow = await mobilePage.evaluate(() => ({
-    viewport: document.documentElement.clientWidth,
+  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const smallPage = await mobile.newPage();
+  await smallPage.goto("http://127.0.0.1:15423/", { waitUntil: "networkidle" });
+  await smallPage.getByRole("button", { name: "Appearance", exact: true }).click();
+  const dims = await smallPage.evaluate(() => ({
     page: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
   }));
-  assert.ok(overflow.page <= overflow.viewport + 1, "Mobile page overflows: " + JSON.stringify(overflow));
-  const mobilePath = resolve(artifacts, "mobile-390.png");
-  await mobilePage.screenshot({ path: mobilePath, fullPage: true, animations: "disabled" });
-  assert.deepEqual(errors, [], "Unexpected browser console/page errors");
+  assert.ok(dims.page <= dims.viewport + 1, "Mobile horizontal overflow: " + JSON.stringify(dims));
+  const darkButton = smallPage.getByRole("group", { name: "Appearance mode" }).getByRole("button", { name: "Dark" });
+  const darkBounds = await darkButton.boundingBox();
+  assert.ok(darkBounds && darkBounds.x >= 0 && darkBounds.x + darkBounds.width <= 390, "Dark mode button must fit the viewport.");
+  await darkButton.click();
+  assert.equal(await darkButton.getAttribute("aria-pressed"), "true");
+  const pngMobile = resolve(artifacts, "notebook-appearance-mobile.png");
+  await smallPage.screenshot({ path: pngMobile, fullPage: true, animations: "disabled" });
+  assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: ["desktop render", "encode action", "intermediate preview", "decoder navigation", "decode action", "error feedback", "mobile no-overflow", "no page errors"],
+    checked: ["workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
-      { path: desktopPath, bytes: (await stat(desktopPath)).size },
-      { path: mobilePath, bytes: (await stat(mobilePath)).size },
+      { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
+      { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },
+      { path: pngDecode, bytes: (await stat(pngDecode)).size },
+      { path: pngMobile, bytes: (await stat(pngMobile)).size },
     ],
-    nativeBridge: "mocked (not native GUI acceptance)",
+    bridge: "mocked (not native IPC acceptance)",
   }, null, 2));
 } finally {
   await browser?.close();
-  await vite.close();
+  await server.close();
 }
