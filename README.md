@@ -19,7 +19,7 @@ The experimental desktop workbench combines a compact source editor, a step-by-s
 
 The community theme choices are adapted palettes from independent developer-theme projects (Catppuccin, Dracula, Gruvbox, Ayu, GitHub Primer, and Everforest); see [theme attribution and sources](docs/theme-attributions.md). They are not a dependency on any other application.
 
-The native cipher engine still uses Recipe 001 with a manually chosen key. Appearance controls are implemented; more recipe choices, experiment management, and linguistic recovery remain future work.
+The application now provides a data-driven Rust rule engine and four bundled JSON recipe examples. Rules are configured through the recipe editor, while the existing manual-key phonetic behavior remains available as Recipe 001. Persistent experiment history and automatic adjective-key derivation are not implemented.
 
 ## Selecting candidate words
 
@@ -34,6 +34,16 @@ With the correct key, the reversible shift yields the exact phonetic intermediat
 For example, **fox** and **fix** can produce the same transformed word `fucc` and the same ciphertext under Recipe 001. The top-ranked suggestion may be wrong. For large or unsupported inputs, the exact intermediate remains available even if the English reconstruction fails.
 
 The optional word-ranking data is derived from wordfreq and distributed with its attribution and notice: [reconstruction data provenance](src-tauri/data/NOTICE-english-frequency.md). The desktop application needs no Python runtime.
+
+## User-authored recipes
+
+The Rust rule engine now loads bundled example recipes from versioned JSON files in recipes/. These use exactly the same schema as user-created recipes; no recipe ID is special-cased. Open the Recipes panel to add, configure, enable, reorder, and save rules as locally stored JSON. You can duplicate bundled examples, copy JSON for sharing, or import pasted/selected JSON files. A native Save As dialog is not yet provided.
+
+The built-ins are Recipe 001 Phonetic Rotation (previous output preserved), Recipe 002 Consonant Skeleton (lossy), Recipe 003 Word Mirror (reversible), and Recipe 004 Pair Swap + Vowel Rotation (reversible). Decoding applies reversible operations backward. Candidate reconstruction is available only for explicitly supported lossy combinations.
+
+The editor identifies bundled examples, saved local recipes, and unsaved changes. Running a modified or newly created recipe without saving displays an **Unsaved recipe** notice and a shortcut back to the editor: those in-memory changes will be lost when the application restarts. Exact reversible decoding presents one plaintext result and uses the active recipe's name in the inspector, while lossy recipes retain the surviving intermediate and speculative English suggestion separately.
+
+See docs/recipe-format.md for the schema and storage model.
 
 ## Development
 

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-001",
+  "name": "Phonetic Rotation",
+  "description": "Pronunciation-driven consonant cycling and vowel-run collapse, followed by a passphrase shift.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "phonetic_rotate"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "position_shift",
+        "base": 3,
+        "keyed": true
+      }
+    }
+  ]
+}
