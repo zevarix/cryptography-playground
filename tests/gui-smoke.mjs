@@ -10,9 +10,11 @@ import { createServer } from "vite";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifacts = resolve(root, "test-artifacts");
 await mkdir(artifacts, { recursive: true });
-const recipeFixtures = await Promise.all(["001","002","003","004"].map(async number =>
-  JSON.parse(await readFile(resolve(root, "recipes", number + ".json"), "utf8"))
-));
+const recipeFixtures = await Promise.all(
+  Array.from({ length: 11 }, (_, i) => String(i + 1).padStart(3, "0")).map(async number =>
+    JSON.parse(await readFile(resolve(root, "recipes", number + ".json"), "utf8"))
+  )
+);
 const server = await createServer({
   root, configFile: resolve(root, "vite.config.ts"),
   server: { host: "127.0.0.1", port: 15423, strictPort: true },
@@ -48,13 +50,19 @@ try {
         if (command !== "evaluate_recipe") throw new Error("Unexpected command: " + command);
         const { recipe, direction } = args;
         const keyRequired = recipe.steps.some(s => s.enabled &&
-          (s.rule.type === "phonetic_rotate" || (s.rule.type === "position_shift" && s.rule.keyed)));
-        if (keyRequired && args.key !== "spectacular") throw new Error("Test bridge: incorrect key.");
+          (s.rule.type === "phonetic_rotate" ||
+            (s.rule.type === "position_shift" && s.rule.keyed) ||
+            ["vigenere", "beaufort"].includes(s.rule.type)));
+        if (keyRequired && !["spectacular", "lemon"].includes(args.key)) throw new Error("Test bridge: incorrect key.");
+        const vigenere = recipe.steps.some(s => s.enabled && s.rule.type === "vigenere");
+        const railFence = recipe.steps.some(s => s.enabled && s.rule.type === "rail_fence");
         const mirror = recipe.steps.some(s => s.enabled && s.rule.type === "word_mirror");
         const phonetic = recipe.steps.some(s => s.enabled && s.rule.type === "phonetic_rotate");
         const skeleton = recipe.steps.some(s => s.enabled && s.rule.type === "remove_vowels");
         if (direction === "encode") {
-          const output = mirror ? "mirrorfixture" : skeleton ? "skeletonfixture" : phonetic ? "fixturecipher" : "pairfixture";
+          const output = mirror ? "mirrorfixture" : skeleton ? "skeletonfixture" :
+            phonetic ? "fixturecipher" : vigenere ? "vigenerefixture" :
+            railFence ? "railfixture" : "pairfixture";
           return {
             output, intermediate: output, exact: !phonetic && !skeleton,
             reconstruction: null,
@@ -98,6 +106,36 @@ try {
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   const pngRecipes = resolve(artifacts, "recipe-library-and-builder.png");
   await page.screenshot({ path: pngRecipes, fullPage: true, animations: "disabled" });
+  assert.equal(await page.locator(".recipe-library-entry").count(), 11);
+  await page.getByRole("button", { name: /Vigenere/ }).click();
+  assert.equal(await page.locator("#rule-0").inputValue(), "vigenere");
+  assert.equal(await page.locator("#rule-0 optgroup[label='Classical substitution (cifers)']").count(), 1);
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  await page.locator("#passphrase").fill("");
+  assert.equal(await page.getByRole("button", { name: /Encode/ }).isDisabled(), true);
+  await page.locator("#passphrase").fill("lemon");
+  await page.getByRole("button", { name: /Encode/ }).click();
+  assert.equal(await page.locator("#cipher-result").innerText(), "vigenerefixture");
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  await page.getByRole("button", { name: /Affine Substitution/ }).click();
+  await page.locator("#affine-a-0").selectOption("11");
+  await page.locator("#affine-b-0").fill("7");
+  assert.match(await page.locator(".recipe-edit-status").innerText(), /Unsaved changes/);
+  const pngClassical = resolve(artifacts, "classical-affine-rule-editor.png");
+  await page.screenshot({ path: pngClassical, fullPage: true, animations: "disabled" });
+  await page.getByRole("button", { name: "Save a copy" }).click();
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  await page.getByRole("button", { name: /Affine Substitution \(custom\)/ }).click();
+  assert.equal(await page.locator("#affine-a-0").inputValue(), "11");
+  assert.equal(await page.locator("#affine-b-0").inputValue(), "7");
+  await page.getByRole("button", { name: /Rail Fence/ }).click();
+  await page.locator("#rail-count-0").fill("4");
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  assert.match(await page.locator(".recipe-save-state").innerText(), /Unsaved recipe/);
+  await page.locator("#passphrase").fill("");
+  await page.getByRole("button", { name: /Encode/ }).click();
+  assert.equal(await page.locator("#cipher-result").innerText(), "railfixture");
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
   await page.getByRole("button", { name: /Word Mirror/ }).click();
   assert.match(await page.locator(".recipe-edit-status").innerText(), /Bundled example/);
   await page.locator("#shift-base-1").fill("7");
@@ -252,11 +290,12 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: [  "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: [ "classical recipe catalog", "Vigenere passphrase requirement", "Affine configuration and saved copy", "Rail Fence parameter editing", "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
       { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
       { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },
       { path: pngRecipes, bytes: (await stat(pngRecipes)).size },
+      { path: pngClassical, bytes: (await stat(pngClassical)).size },
       { path: pngExact, bytes: (await stat(pngExact)).size },
       { path: pngDecode, bytes: (await stat(pngDecode)).size },
       { path: pngMobile, bytes: (await stat(pngMobile)).size },

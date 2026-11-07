@@ -459,3 +459,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .inspector-exact-status { padding: 10px 3px; color: var(--app-success); border-bottom: 1px solid var(--app-border); font-size: 11px; font-weight: 650; }
 .data-rows dd { text-align: right; max-width: 65%; overflow-wrap: anywhere; }
 @media(max-width:850px) { .recipe-unsaved-top { display: none; } }
+
+/* Notes for imported classical rules using the workbench passphrase. */
+.rule-key-note { color: var(--app-muted); font-size: 11px; line-height: 1.55; }

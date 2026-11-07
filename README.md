@@ -45,6 +45,12 @@ The editor identifies bundled examples, saved local recipes, and unsaved changes
 
 See docs/recipe-format.md for the schema and storage model.
 
+## Classical cipher rules (public Rust crate)
+
+The Rule Library now includes Caesar/ROT13, Vigenere, Beaufort, Affine, Atbash, and Rail Fence from the pinned cifers 0.1.5 crate. New bundled example recipes 005-011 use the same JSON schema as every user recipe; users can freely combine these steps with the experimental linguistic rules and save the result.
+
+Vigenere and Beaufort use the workbench passphrase without storing it inside the recipe. All classical adapters preserve supported ASCII input on exact reverse, including case and punctuation. Rail Fence transposes all characters rather than stripping formatting. See [classical cipher adoption notes](docs/classical-cipher-adoption.md) for upstream source/license and test vectors. These historical ciphers are not secure encryption.
+
 ## Development
 
 ```sh

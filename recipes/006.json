@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-006",
+  "name": "Vigenere",
+  "description": "Classic repeating-key letter substitution using the workbench passphrase. Preserves ASCII punctuation and case.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "vigenere"
+      }
+    }
+  ]
+}

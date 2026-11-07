@@ -22,6 +22,11 @@ The required schemaVersion is currently 1; name/description and IDs are bounded.
 - position_shift: base 0–25, keyed true/false (passphrase optionally mixed into positional shift).
 - rotate_vowels: steps 0–4.
 - phonetic_rotate: must be first enabled rule and may appear only once; needs a letter-only key and dictionary-supported words.
+- caesar: shift 0-25 (shift 13 is ROT13).
+- atbash: no parameters.
+- vigenere and beaufort: require the workbench passphrase (1-64 ASCII English letters); the key is not saved in JSON.
+- affine: multiplier a is one of 1,3,5,7,9,11,15,17,19,21,23,25; offset b is 0-25. Invalid values are rejected before upstream setters can panic.
+- rail_fence: rails 2-16. All ASCII characters are transposed and restored, including whitespace and punctuation.
 
 ## Rule catalog
 
@@ -34,6 +39,12 @@ The required schemaVersion is currently 1; name/description and IDs are bounded.
 | Voiced/unvoiced pair swap | pair_swap | Yes |
 | Rotate vowels | rotate_vowels | Yes |
 | Position shift | position_shift | Yes |
+| Caesar / ROT13 | caesar | Yes |
+| Atbash | atbash | Yes |
+| Vigenere | vigenere | Yes |
+| Beaufort | beaufort | Yes |
+| Affine | affine | Yes |
+| Rail Fence | rail_fence | Yes |
 
 For reversible pipelines, decoding applies the enabled rules in reverse order and uses each inverse. These preserve supported ASCII input, including case, punctuation and whitespace.
 
@@ -45,8 +56,17 @@ For lossy pipelines, the decoder reverses the final reversible suffix and retain
 - recipes/002.json: Consonant Skeleton, doubled-consonant collapse, unkeyed shift.
 - recipes/003.json: Word Mirror, unkeyed shift.
 - recipes/004.json: Pair swap, vowel rotation, unkeyed shift.
+- recipes/005.json: Caesar / ROT13.
+- recipes/006.json: Vigenere (workbench passphrase).
+- recipes/007.json: Beaufort (workbench passphrase).
+- recipes/008.json: Affine with a=5, b=8.
+- recipes/009.json: Rail Fence with three rails.
+- recipes/010.json: Atbash.
+- recipes/011.json: Classical Layers (Vigenere, Rail Fence and Atbash).
 
 These are editable examples, not special engine implementations. The examples use base 5 for the unkeyed shift. Users can change this rule and reorder compatible rules.
+
+The public classical cipher rules are adapters to the exact pinned MIT-licensed cifers crate version 0.1.5. See docs/classical-cipher-adoption.md for implementation, test vectors, ASCII and punctuation semantics, upstream license ambiguity, and the independent public-distribution gate.
 
 ## Storage and sharing
 
