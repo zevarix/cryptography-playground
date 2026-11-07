@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-010",
+  "name": "Atbash",
+  "description": "Reverse the alphabet: A maps to Z, B to Y, with letter case and punctuation preserved.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "atbash"
+      }
+    }
+  ]
+}

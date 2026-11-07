@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-007",
+  "name": "Beaufort",
+  "description": "Classic Beaufort reciprocal substitution using the workbench passphrase.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "beaufort"
+      }
+    }
+  ]
+}

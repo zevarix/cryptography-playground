@@ -5,7 +5,13 @@ export type Rule =
   | { type: "word_mirror" }
   | { type: "pair_swap" }
   | { type: "rotate_vowels"; steps: number }
-  | { type: "position_shift"; base: number; keyed: boolean };
+  | { type: "position_shift"; base: number; keyed: boolean }
+  | { type: "caesar"; shift: number }
+  | { type: "atbash" }
+  | { type: "vigenere" }
+  | { type: "beaufort" }
+  | { type: "affine"; a: number; b: number }
+  | { type: "rail_fence"; rails: number };
 
 export type Step = { enabled: boolean; rule: Rule };
 export type Recipe = {
@@ -48,6 +54,12 @@ export const RULE_CATALOG: Array<{
   { type: "pair_swap", label: "Voiced/unvoiced pairs", detail: "Swap B/P, D/T, G/K, V/F, Z/S", lossy: false },
   { type: "rotate_vowels", label: "Vowel rotation", detail: "Cycle A→E→I→O→U", lossy: false },
   { type: "position_shift", label: "Position shift", detail: "Shift using word, character, and optionally key position", lossy: false },
+  { type: "caesar", label: "Caesar / ROT13", detail: "Classical alphabet shift (13 is ROT13). Powered by cifers 0.1.5.", lossy: false },
+  { type: "atbash", label: "Atbash", detail: "Reverse A-Z using a classical Affine substitution. Powered by cifers 0.1.5.", lossy: false },
+  { type: "vigenere", label: "Vigenere", detail: "Repeating-key substitution using the workbench passphrase. Powered by cifers 0.1.5.", lossy: false },
+  { type: "beaufort", label: "Beaufort", detail: "Reciprocal repeating-key substitution using the workbench passphrase. Powered by cifers 0.1.5.", lossy: false },
+  { type: "affine", label: "Affine", detail: "Alphabet transformation (a × letter + b) mod 26. Powered by cifers 0.1.5.", lossy: false },
+  { type: "rail_fence", label: "Rail Fence", detail: "Zigzag transposition of every ASCII character, including punctuation. Powered by cifers 0.1.5.", lossy: false },
 ];
 
 export function labelForRule(rule: Rule): string {
@@ -59,11 +71,17 @@ export function lossyRule(rule: Rule): boolean {
 export function createRule(type: RuleKind): Rule {
   if (type === "rotate_vowels") return { type, steps: 1 };
   if (type === "position_shift") return { type, base: 5, keyed: false };
+  if (type === "caesar") return { type, shift: 13 };
+  if (type === "affine") return { type, a: 5, b: 8 };
+  if (type === "rail_fence") return { type, rails: 3 };
   return { type } as Rule;
 }
 export function recipeNeedsKey(recipe: Recipe | null): boolean {
   return recipe?.steps.some(s => s.enabled &&
-    (s.rule.type === "phonetic_rotate" || (s.rule.type === "position_shift" && s.rule.keyed))) ?? false;
+    (s.rule.type === "phonetic_rotate" ||
+      (s.rule.type === "position_shift" && s.rule.keyed) ||
+      s.rule.type === "vigenere" ||
+      s.rule.type === "beaufort")) ?? false;
 }
 export function newUserRecipe(): Recipe {
   return {

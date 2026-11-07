@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-005",
+  "name": "Caesar / ROT13",
+  "description": "Rotate alphabetic letters by 13 positions; spaces, punctuation and case remain in place.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "caesar",
+        "shift": 13
+      }
+    }
+  ]
+}

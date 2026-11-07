@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-011",
+  "name": "Classical Layers",
+  "description": "Compose keyed Vigenere, three-rail transposition, and Atbash. Decode reverses all three in the correct order.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "vigenere"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "rail_fence",
+        "rails": 3
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "atbash"
+      }
+    }
+  ]
+}

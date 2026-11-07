@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-009",
+  "name": "Rail Fence",
+  "description": "Three-rail zigzag transposition. For lossless desktop round-trips, this recipe rearranges every ASCII character, including spaces and punctuation.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "rail_fence",
+        "rails": 3
+      }
+    }
+  ]
+}

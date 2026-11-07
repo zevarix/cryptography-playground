@@ -16,6 +16,26 @@ type Props = {
   onWorkbench: () => void;
 };
 
+// Keep engine rule implementations independent of saved recipe examples.
+function RuleOptions() {
+  const groups: Array<{ name: string; types: RuleKind[] }> = [
+    { name: "Linguistic & experimental", types: [
+      "phonetic_rotate", "remove_vowels", "collapse_doubles", "word_mirror",
+      "pair_swap", "rotate_vowels", "position_shift",
+    ] },
+    { name: "Classical substitution (cifers)", types: [
+      "caesar", "atbash", "vigenere", "beaufort", "affine",
+    ] },
+    { name: "Classical transposition (cifers)", types: ["rail_fence"] },
+  ];
+  return <>{groups.map(group => (
+    <optgroup key={group.name} label={group.name}>
+      {RULE_CATALOG.filter(item => group.types.includes(item.type)).map(item =>
+        <option key={item.type} value={item.type}>{item.label}</option>)}
+    </optgroup>
+  ))}</>;
+}
+
 export default function RecipePage({
   builtins, saved, active, busy, onActivate, onSave, onDelete, onNotice, onWorkbench,
 }: Props) {
@@ -187,7 +207,7 @@ export default function RecipePage({
                   <label htmlFor={"rule-" + index}>Rule</label>
                   <select id={"rule-" + index} value={step.rule.type} onChange={event =>
                     updateRule(index,createRule(event.target.value as RuleKind))}>
-                    {RULE_CATALOG.map(rule => <option key={rule.type} value={rule.type}>{rule.label}</option>)}
+                    <RuleOptions />
                   </select>
                   <span className={"recipe-rule-kind" + (lossyRule(step.rule) ? " loss" : "")}>
                     {lossyRule(step.rule) ? "LOSS" : "REV"}
@@ -218,13 +238,56 @@ export default function RecipePage({
                     </label>
                   </div>
                 )}
+                {step.rule.type === "caesar" && (
+                  <div className="rule-settings">
+                    <label htmlFor={"caesar-shift-" + index}>Alphabet shift
+                      <input id={"caesar-shift-" + index} type="number" min={0} max={25}
+                        value={step.rule.shift} onChange={event =>
+                          updateRule(index,{type:"caesar",shift:Number(event.target.value)})} />
+                    </label>
+                    <span>13 = ROT13</span>
+                  </div>
+                )}
+                {step.rule.type === "affine" && (
+                  <div className="rule-settings">
+                    <label htmlFor={"affine-a-" + index}>Multiplier (coprime to 26)
+                      <select id={"affine-a-" + index} value={step.rule.a}
+                        onChange={event => updateRule(index,{
+                          type:"affine",a:Number(event.target.value),
+                          b:(step.rule as Extract<Rule,{type:"affine"}>).b
+                        })}>
+                        {[1,3,5,7,9,11,15,17,19,21,23,25].map(a =>
+                          <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                    <label htmlFor={"affine-b-" + index}>Offset
+                      <input id={"affine-b-" + index} type="number" min={0} max={25}
+                        value={step.rule.b} onChange={event => updateRule(index,{
+                          type:"affine",a:(step.rule as Extract<Rule,{type:"affine"}>).a,
+                          b:Number(event.target.value)
+                        })} />
+                    </label>
+                  </div>
+                )}
+                {step.rule.type === "rail_fence" && (
+                  <div className="rule-settings">
+                    <label htmlFor={"rail-count-" + index}>Rails
+                      <input id={"rail-count-" + index} type="number" min={2} max={16}
+                        value={step.rule.rails} onChange={event =>
+                          updateRule(index,{type:"rail_fence",rails:Number(event.target.value)})} />
+                    </label>
+                  </div>
+                )}
+                {(step.rule.type === "vigenere" || step.rule.type === "beaufort") && (
+                  <p className="rule-key-note">Uses the workbench passphrase. No keyword is embedded in this recipe JSON.</p>
+                )}
               </div>
             </li>
           ))}
         </ol>
         <div className="recipe-add-row">
           <select aria-label="Rule to add" value={typeToAdd} onChange={e => setTypeToAdd(e.target.value as RuleKind)}>
-            {RULE_CATALOG.map(r => <option key={r.type} value={r.type}>{r.label}</option>)}
+            <RuleOptions />
           </select>
           <button disabled={draft.steps.length >= 16} onClick={() => update({steps:[...draft.steps,{enabled:true,rule:createRule(typeToAdd)}]})}>＋ Add rule</button>
         </div>

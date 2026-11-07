@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-008",
+  "name": "Affine Substitution",
+  "description": "E(x)=(5x+8) mod 26, with a coprime multiplier and adjustable offset.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "affine",
+        "a": 5,
+        "b": 8
+      }
+    }
+  ]
+}
