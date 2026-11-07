@@ -17,9 +17,12 @@ Recipe 001 will use the Carnegie Mellon Pronouncing Dictionary, with the origina
 
 ```sh
 npm install
-npm run tauri dev
+npm run tauri dev  # development Vite server + desktop window
+npm run tauri build -- --no-bundle  # standalone release executable
 npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
+
+GUI smoke testing: set CHROME_EXECUTABLE to an installed Chromium-family browser executable and run npm run test:gui. The isolated headless browser mocks the Tauri invoke bridge; Rust engine tests and native GUI acceptance remain separate. Screenshots go into the ignored test-artifacts directory.
 
 No publication license has been selected yet. The repository remains private until a separate publication decision.
