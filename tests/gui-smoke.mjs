@@ -33,16 +33,28 @@ try {
         if (command === "encode_message") return {
           ciphertext: "fixturecipher", intermediate: "fixtureintermediate", words: 9, phonemes: 32,
         };
-        if (command === "decode_message") return {
-          intermediate: "fixtureintermediate",
-          reconstruction: {
-            suggested: "the quick brown fox jumps over the lazy dog",
-            note: "Speculative expansion. 1 word has several valid matches.",
-            words: [
-              { transformed: "fucc", suggested: "fox", alternatives: ["fix", "fax"], compatibleCount: 3 },
-            ],
-          },
-        };
+        if (command === "decode_message" || command === "choose_reconstruction") {
+          const picked = args.choices?.find(choice => choice.index === 3)?.candidate ?? "fix";
+          if (picked === "fax") throw new Error("Candidate conflicts with the remaining rotations.");
+          if (!["fox", "fix"].includes(picked)) throw new Error("Invalid candidate.");
+          const suggested = "the quick brown " + picked + " jumps over the lazy dog";
+          const wordNames = ["the", "quick", "brown", picked, "jumps", "over", "the", "lazy", "dog"];
+          const transformed = ["the", "qwhik", "brogn", "fucc", "jammpsc", "evi", "dho", "luza", "degg"];
+          const words = wordNames.map((word, index) => ({
+            transformed: transformed[index],
+            suggested: word,
+            alternatives: index === 3 ? (picked === "fox" ? ["fix", "fax"] : ["fox", "fax"]) : [],
+            compatibleCount: index === 3 ? 3 : 1,
+          }));
+          return {
+            intermediate: "fixtureintermediate",
+            reconstruction: {
+              suggested,
+              note: "Speculative expansion. 1 word has several valid matches.",
+              words,
+            },
+          };
+        }
         throw new Error("Unexpected command: " + command);
       },
     };
@@ -59,14 +71,34 @@ try {
   await page.locator("#operation-mode").selectOption("decode");
   await page.getByRole("button", { name: /Decode \/ suggest English/ }).click();
   assert.equal(await page.locator("#intermediate-result").innerText(), "fixtureintermediate");
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fix jumps over the lazy dog");
+  // Click an ambiguous word in the sentence, select a different candidate,
+  // then verify the backend results update the entire phrase and inspector.
+  await page.getByRole("button", { name: "Choose a different word for fix, word 4" }).click();
+  await page.getByRole("group", { name: "Choose word 4" }).getByRole("button", { name: "Use fox for word 4" }).click();
+  await page.waitForFunction(() =>
+    document.querySelector("#cipher-result")?.textContent?.includes("brown fox jumps"));
   assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
-  assert.match(await page.locator(".reconstruction-warning").innerText(), /not verified|cannot verify|not which original/);
-  assert.match(await page.locator(".reconstruction-word").innerText(), /fix, fax/);
+  assert.equal(await page.locator("#intermediate-result").innerText(), "fixtureintermediate");
+  assert.equal(await page.getByRole("group", { name: "Candidates for word 4 (fucc)" })
+    .getByRole("button", { name: "Use fox for word 4" }).getAttribute("aria-pressed"), "true");
+  // A rejected alternative must roll back the visual preview, not corrupt it.
+  await page.getByRole("group", { name: "Candidates for word 4 (fucc)" })
+    .getByRole("button", { name: "Use fax for word 4" }).click();
+  await page.waitForFunction(() =>
+    document.querySelector('[role="status"]')?.textContent?.includes("Choice not applied"));
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
+  await page.getByRole("button", { name: /Reset word selections/ }).click();
+  await page.waitForFunction(() =>
+    document.querySelector("#cipher-result")?.textContent?.includes("brown fix jumps"));
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fix jumps over the lazy dog");
+  assert.match(await page.locator(".reconstruction-warning").innerText(), /cannot be proven|not verified|cannot verify/);
+  assert.match(await page.locator(".reconstruction-word").innerText(), /fox|fax/);
   const pngDecode = resolve(artifacts, "notebook-decoder-english-suggestion.png");
   await page.screenshot({ path: pngDecode, fullPage: true, animations: "disabled" });
   const editableEnglish = page.getByRole("textbox", { name: "Edit suggested English" });
-  await editableEnglish.fill("the quick brown fix jumps over the lazy dog");
-  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fix jumps over the lazy dog");
+  await editableEnglish.fill("the quick brown fox jumps over the lazy dog");
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
   await page.locator("#passphrase").fill("incorrect");
   await page.getByRole("button", { name: /Decode \/ suggest English/ }).click();
   assert.match(await page.locator('[role="status"]').innerText(), /incorrect key/);
@@ -111,7 +143,7 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: ["workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: ["workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
       { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
       { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },

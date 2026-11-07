@@ -5,7 +5,7 @@
 //! Ranking those valid candidates by English frequency does not establish that
 //! any one candidate was the original word.
 use super::{VOWEL_OUTPUTS, choices, dictionary, initial, is_vowel, phone};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -35,6 +35,15 @@ pub struct Reconstruction {
     pub suggested: Option<String>,
     pub words: Vec<WordSuggestion>,
     pub note: String,
+}
+
+/// One user-selected interpretation. Indices refer to whitespace-delimited
+/// words in the recovered intermediate (zero-based), never character offsets.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WordChoice {
+    pub index: usize,
+    pub candidate: String,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
@@ -224,6 +233,63 @@ fn ordered_matches<'a>(
 /// The exact intermediate is always produced by the cipher decoder first.
 /// This supplementary search only works for common, bounded dictionary input.
 pub fn reconstruct(intermediate: &str, key: &str) -> Reconstruction {
+    reconstruct_internal(intermediate, key, &HashMap::new())
+}
+
+/// Reconstruct again after a user selects candidate words. A chosen word is
+/// constrained at its exact position, and all later global rotation states are
+/// recomputed. This is not a local text substitution.
+pub fn reconstruct_with_choices(
+    intermediate: &str,
+    key: &str,
+    choices: &[WordChoice],
+) -> Result<Reconstruction, String> {
+    let words: Vec<_> = intermediate.split_whitespace().collect();
+    if words.len() > MAX_RECONSTRUCTION_WORDS {
+        return Err("Message exceeds the interactive reconstruction limit.".into());
+    }
+    if choices.len() > words.len() {
+        return Err("Too many selected words for this message.".into());
+    }
+    let mut forced = HashMap::new();
+    for selection in choices {
+        let candidate = selection.candidate.as_str();
+        if selection.index >= words.len() {
+            return Err(format!(
+                "Word position {} is outside this message.",
+                selection.index + 1
+            ));
+        }
+        if candidate.len() > MAX_TRANSFORMED_WORD_LENGTH
+            || candidate.is_empty()
+            || !candidate.bytes().all(|letter| letter.is_ascii_lowercase())
+        {
+            return Err("A selected word must be lowercase English letters.".into());
+        }
+        if !dictionary().contains_key(candidate) {
+            return Err(format!(
+                "'{candidate}' is not in the pronunciation dictionary."
+            ));
+        }
+        if forced.insert(selection.index, candidate).is_some() {
+            return Err("A word position may have only one selected candidate.".into());
+        }
+    }
+    let reconstruction = reconstruct_internal(intermediate, key, &forced);
+    if reconstruction.suggested.is_none() {
+        return Err(format!(
+            "Selected word combination cannot reproduce a complete valid message: {}",
+            reconstruction.note,
+        ));
+    }
+    Ok(reconstruction)
+}
+
+fn reconstruct_internal(
+    intermediate: &str,
+    key: &str,
+    forced: &HashMap<usize, &str>,
+) -> Reconstruction {
     let tokens: Vec<&str> = intermediate.split_whitespace().collect();
     if tokens.len() > MAX_RECONSTRUCTION_WORDS
         || tokens
@@ -261,7 +327,15 @@ pub fn reconstruct(intermediate: &str, key: &str) -> Reconstruction {
                 .map(|entry| entry.word.to_owned())
                 .collect();
 
-            for candidate in matches.iter().take(BEAM_WIDTH) {
+            for candidate in matches
+                .iter()
+                .filter(|candidate| {
+                    forced
+                        .get(&position)
+                        .is_none_or(|chosen| candidate.word == *chosen)
+                })
+                .take(BEAM_WIDTH)
+            {
                 let mut words = path.words.clone();
                 words.push(WordSuggestion {
                     transformed: (*transformed).to_owned(),
@@ -373,6 +447,103 @@ mod tests {
             word.suggested == "fox" || word.alternatives.iter().any(|other| other == "fox"),
             "The intended original 'fox' must remain a supported candidate"
         );
+    }
+
+    #[test]
+    fn choosing_fox_updates_phrase_and_preserves_exact_encoding() {
+        let encoded =
+            engine::encode("the quick brown fox jumps over the lazy dog", "gravel").unwrap();
+        let choice = WordChoice {
+            index: 3,
+            candidate: "fox".into(),
+        };
+        let decoded =
+            engine::decode_with_choices(&encoded.ciphertext, "gravel", &[choice]).unwrap();
+        assert_eq!(decoded.intermediate, encoded.intermediate);
+        assert_eq!(decoded.reconstruction.words[3].suggested, "fox");
+        let candidate = decoded.reconstruction.suggested.unwrap();
+        assert_eq!(
+            engine::encode(&candidate, "gravel").unwrap().ciphertext,
+            encoded.ciphertext
+        );
+    }
+
+    #[test]
+    fn multiple_pinned_words_reconstruct_a_consistent_phrase() {
+        let encoded = engine::encode(
+            "The quick brown fox jumps over the lazy dog.",
+            "spectacular",
+        )
+        .unwrap();
+        let pins = vec![
+            WordChoice {
+                index: 2,
+                candidate: "brown".into(),
+            },
+            WordChoice {
+                index: 3,
+                candidate: "fox".into(),
+            },
+        ];
+        let decoded =
+            engine::decode_with_choices(&encoded.ciphertext, "spectacular", &pins).unwrap();
+        assert_eq!(decoded.intermediate, encoded.intermediate);
+        assert_eq!(decoded.reconstruction.words[2].suggested, "brown");
+        assert_eq!(decoded.reconstruction.words[3].suggested, "fox");
+        let replay = engine::encode(
+            decoded.reconstruction.suggested.as_ref().unwrap(),
+            "spectacular",
+        )
+        .unwrap();
+        assert_eq!(replay.ciphertext, encoded.ciphertext);
+    }
+
+    #[test]
+    fn incompatible_selection_is_rejected() {
+        let encoded =
+            engine::encode("the quick brown fox jumps over the lazy dog", "gravel").unwrap();
+        let forced = [WordChoice {
+            index: 3,
+            candidate: "cat".into(),
+        }];
+        assert!(engine::decode_with_choices(&encoded.ciphertext, "gravel", &forced,).is_err());
+    }
+
+    #[test]
+    fn chosen_word_errors_do_not_replace_exact_intermediate() {
+        let encoded =
+            engine::encode("the quick brown fox jumps over the lazy dog", "gravel").unwrap();
+        for selection in [
+            WordChoice {
+                index: 99,
+                candidate: "fox".into(),
+            },
+            WordChoice {
+                index: 3,
+                candidate: "zzzzinvalid".into(),
+            },
+            WordChoice {
+                index: 3,
+                candidate: "BROWN".into(),
+            },
+        ] {
+            assert!(
+                engine::decode_with_choices(&encoded.ciphertext, "gravel", &[selection],).is_err()
+            );
+        }
+        let duplicate = vec![
+            WordChoice {
+                index: 3,
+                candidate: "fix".into(),
+            },
+            WordChoice {
+                index: 3,
+                candidate: "fox".into(),
+            },
+        ];
+        assert!(engine::decode_with_choices(&encoded.ciphertext, "gravel", &duplicate).is_err());
+        let decoded = engine::decode(&encoded.ciphertext, "gravel").unwrap();
+        assert_eq!(decoded.intermediate, encoded.intermediate);
     }
 
     #[test]

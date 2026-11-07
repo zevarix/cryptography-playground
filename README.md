@@ -21,6 +21,12 @@ The community theme choices are adapted palettes from independent developer-them
 
 The native cipher engine still uses Recipe 001 with a manually chosen key. Appearance controls are implemented; more recipe choices, experiment management, and linguistic recovery remain future work.
 
+## Selecting candidate words
+
+When decoding, the English guess highlights ambiguous words. Click one to open alternatives, or use the candidate buttons in the Inspector. Clicking a candidate updates the visible phrase immediately while the Rust engine checks the entire message against the **same ciphertext, key, and stateful phonetic rotations**. Successful choices become pinned; incompatible choices are rolled back with a message, without changing the exact recovered intermediate. The *Reset word selections* control removes pins and re-ranks the complete phrase.
+
+Choices are interactive interpretations rather than proven plaintext. A manual English edit stays editable, but another candidate selection rebuilds the phrase from validated dictionary readings. The experiment remains intentionally lossy.
+
 ## Best-effort decoding
 
 With the correct key, the reversible shift yields the exact phonetic intermediate text. The decoder now offers a **speculative English reconstruction** by matching dictionary pronunciations against the actual key-driven rotation counters. When multiple originals share the same lossy transform, it presents alternatives and allows editing; it does not claim to know the original spelling or punctuation.

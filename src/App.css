@@ -251,3 +251,96 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   overflow-wrap: anywhere;
   line-height: 1.5;
 }
+
+/* Reversible shift output stays visually distinct from selectable, speculative English. */
+.english-phrase {
+  padding: 13px 12px;
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  min-height: 70px;
+  line-height: 2;
+  font: 12px/2 "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.selectable-word {
+  display: inline;
+  padding: 2px 2px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px dashed var(--app-accent);
+  border-radius: 3px;
+  font: inherit;
+  color: var(--app-accent);
+  background: transparent;
+  cursor: pointer;
+}
+.selectable-word:hover,
+.selectable-word[aria-expanded="true"] {
+  color: var(--app-accent-ink);
+  background: var(--app-accent);
+  border-bottom-style: solid;
+}
+.word-choice-panel {
+  margin: 10px 0;
+  padding: 13px;
+  border: 1px solid var(--app-accent);
+  border-radius: 8px;
+  background: var(--app-panel);
+}
+.word-choice-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.word-choice-heading strong { font-size: 12px; }
+.word-choice-heading button {
+  border: 0;
+  color: var(--app-muted);
+  background: transparent;
+  font-size: 18px;
+  padding: 0 6px;
+}
+.word-choice-panel small { display: block; color: var(--app-muted); margin-top: 8px; }
+.word-option-buttons,
+.candidate-options {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 9px 0 5px;
+}
+.word-option-buttons button,
+.candidate-options button {
+  padding: 5px 9px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.word-option-buttons button:hover:not(:disabled),
+.candidate-options button:hover:not(:disabled) {
+  border-color: var(--app-accent);
+  color: var(--app-accent);
+}
+.word-option-buttons button.current,
+.candidate-options button.candidate-current {
+  border-color: var(--app-accent);
+  background: var(--app-subtle);
+  color: var(--app-text);
+  font-weight: 750;
+}
+.reconstruction-word .locked-word {
+  display: inline-block;
+  padding: 3px 6px;
+  margin-left: auto;
+  border: 1px solid var(--app-success);
+  border-radius: 4px;
+  color: var(--app-success);
+}
+.notebook-actions { flex-wrap: wrap; }

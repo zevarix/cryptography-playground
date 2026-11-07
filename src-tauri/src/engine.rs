@@ -1,5 +1,6 @@
 //! Full-inventory US-English phoneme experiment (not secure encryption).
 mod recovery;
+pub use recovery::WordChoice;
 use serde::Serialize;
 use std::{collections::HashMap, sync::OnceLock};
 
@@ -187,6 +188,15 @@ pub fn encode(plaintext: &str, passphrase: &str) -> Result<Encoded, String> {
     })
 }
 pub fn decode(ciphertext: &str, passphrase: &str) -> Result<Decoded, String> {
+    decode_with_choices(ciphertext, passphrase, &[])
+}
+
+/// Decode the exact shift first, then constrain the optional English reading.
+pub fn decode_with_choices(
+    ciphertext: &str,
+    passphrase: &str,
+    choices: &[WordChoice],
+) -> Result<Decoded, String> {
     let key = key(passphrase)?;
     if ciphertext
         .chars()
@@ -195,7 +205,11 @@ pub fn decode(ciphertext: &str, passphrase: &str) -> Result<Decoded, String> {
         return Err("Ciphertext must contain only letters and whitespace.".into());
     }
     let intermediate = shift(ciphertext, &key, true)?;
-    let reconstruction = recovery::reconstruct(&intermediate, &key);
+    let reconstruction = if choices.is_empty() {
+        recovery::reconstruct(&intermediate, &key)
+    } else {
+        recovery::reconstruct_with_choices(&intermediate, &key, choices)?
+    };
     Ok(Decoded {
         intermediate,
         reconstruction,

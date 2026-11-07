@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   COLOR_ACCENTS, DEFAULT_APPEARANCE, THEMES, getTheme, paletteVars,
@@ -21,6 +21,11 @@ type Reconstruction = {
   note: string;
 };
 type Decoded = { intermediate: string; reconstruction: Reconstruction };
+type WordChoice = { index: number; candidate: string };
+
+function wordOptions(word: RecoveryWord): string[] {
+  return Array.from(new Set([word.suggested, ...word.alternatives]));
+}
 
 const STAGES = [
   { title: "Pronunciation lookup", detail: "Resolve dictionary-supported US-English phonemes", reversible: false },
@@ -47,6 +52,10 @@ function App() {
   const [output, setOutput] = useState("");
   const [intermediate, setIntermediate] = useState("");
   const [reconstruction, setReconstruction] = useState<Reconstruction | null>(null);
+  const [lockedChoices, setLockedChoices] = useState<WordChoice[]>([]);
+  const [selectedWord, setSelectedWord] = useState<number | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const operationId = useRef(0);
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
   const [inspected, setInspected] = useState<"intermediate" | "ciphertext">("intermediate");
@@ -74,15 +83,22 @@ function App() {
     setAppearance(current => ({ ...current, ...patch }));
   }
   function clearResults() {
-    setOutput(""); setIntermediate(""); setReconstruction(null); setDetail(""); setMessage("");
+    operationId.current += 1;
+    setOutput(""); setIntermediate(""); setReconstruction(null);
+    setLockedChoices([]); setSelectedWord(null); setChoosing(false);
+    setDetail(""); setMessage("");
   }
   async function run() {
-    setBusy(true); setMessage("");
+    if (busy || choosing) return;
+    const operation = ++operationId.current;
+    setBusy(true); setChoosing(false); setMessage("");
     try {
       if (direction === "encode") {
         const result = await invoke<Encoded>("encode_message", { text: plaintext, key: passphrase });
+        if (operation !== operationId.current) return;
         setOutput(result.ciphertext);
         setReconstruction(null);
+        setLockedChoices([]); setSelectedWord(null);
         setCiphertext(result.ciphertext);
         setIntermediate(result.intermediate);
         setInspected("intermediate");
@@ -90,6 +106,8 @@ function App() {
         setMessage("Encoded successfully.");
       } else {
         const result = await invoke<Decoded>("decode_message", { ciphertext, key: passphrase });
+        if (operation !== operationId.current) return;
+        setLockedChoices([]); setSelectedWord(null);
         setOutput(result.reconstruction.suggested ?? "");
         setIntermediate(result.intermediate);
         setReconstruction(result.reconstruction);
@@ -100,9 +118,62 @@ function App() {
           : "Shift reversed, but no English reconstruction could be verified against the phonetic rules.");
       }
     } catch (error) {
+      if (operation !== operationId.current) return;
       setOutput(""); setIntermediate(""); setReconstruction(null); setDetail("");
       setMessage(String(error));
-    } finally { setBusy(false); }
+    } finally {
+      if (operation === operationId.current) setBusy(false);
+    }
+  }
+
+  async function reviseChoices(next: WordChoice[], changed?: WordChoice) {
+    if (!reconstruction || direction !== "decode" || choosing || busy) return;
+    const operation = ++operationId.current;
+    const previousOutput = output;
+    const previousReconstruction = reconstruction;
+    const previousDetail = detail;
+    setChoosing(true);
+    setSelectedWord(null);
+    setMessage("Checking the selected words against the full phonetic rotation...");
+    // Update the visible phrase immediately; the Rust engine validates all
+    // remaining words before accepting the selection as a real interpretation.
+    if (changed) {
+      setOutput(reconstruction.words.map((word, index) =>
+        index === changed.index ? changed.candidate : word.suggested).join(" "));
+    }
+    try {
+      const result = await invoke<Decoded>("choose_reconstruction", {
+        ciphertext, key: passphrase, choices: next,
+      });
+      if (operation !== operationId.current) return;
+      if (!result.reconstruction.suggested) throw new Error("No compatible English reconstruction was found.");
+      if (result.intermediate !== intermediate) throw new Error("The recovered intermediate changed unexpectedly.");
+      setOutput(result.reconstruction.suggested);
+      setReconstruction(result.reconstruction);
+      setLockedChoices(next);
+      setDetail(result.reconstruction.note);
+      setInspected("ciphertext");
+      setMessage(next.length
+        ? "Updated and checked " + next.length + " selected word(s)."
+        : "Restored the highest-ranked English suggestion.");
+    } catch (error) {
+      if (operation !== operationId.current) return;
+      setOutput(previousOutput);
+      setReconstruction(previousReconstruction);
+      setDetail(previousDetail);
+      setMessage("Choice not applied: " + String(error));
+    } finally {
+      if (operation === operationId.current) setChoosing(false);
+    }
+  }
+
+  function chooseCandidate(index: number, candidate: string) {
+    const previous = lockedChoices.find(choice => choice.index === index);
+    const next = lockedChoices.filter(choice => choice.index !== index);
+    if (previous?.candidate !== candidate) {
+      next.push({ index, candidate });
+    }
+    void reviseChoices(next, previous?.candidate === candidate ? undefined : { index, candidate });
   }
   async function copy(value: string) {
     try {
@@ -138,7 +209,7 @@ function App() {
         <div className="brand"><span className="brand-icon">⌁</span><strong>Cryptography Playground</strong><span className="brand-division">/ Notebook Lab</span></div>
         <div className="top-controls">
           <span className="recipe-name">Recipe 001 — Phonetic Rotation</span>
-          <button className="top-run" onClick={() => void run()} disabled={!source.trim() || !passphrase.trim() || busy}>▶ {busy ? "Running" : "Run"}</button>
+          <button className="top-run" onClick={() => void run()} disabled={!source.trim() || !passphrase.trim() || busy || choosing}>▶ {busy ? "Running" : "Run"}</button>
           <button onClick={() => setPage("appearance")} aria-label="Appearance settings" title="Appearance settings">⚙</button>
         </div>
       </header>
@@ -167,7 +238,7 @@ function App() {
               <input id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
                 onChange={e => { setPassphrase(e.target.value); clearResults(); }} />
               <p className="helper-text">The current prototype accepts a manually selected letter-only key.</p>
-              <button className="sidebar-run" onClick={() => void run()} disabled={busy || !source.trim() || !passphrase.trim()}>▶ {direction === "encode" ? "Encode" : "Decode / suggest English"}</button>
+              <button className="sidebar-run" onClick={() => void run()} disabled={busy || choosing || !source.trim() || !passphrase.trim()}>▶ {direction === "encode" ? "Encode" : "Decode / suggest English"}</button>
               <div className="sidebar-note">
                 <strong>Experimental only</strong>
                 <p>The lossy recipe cannot restore the exact original English. Never use it for real data security.</p>
@@ -196,11 +267,53 @@ function App() {
                   <div><h3>{direction === "encode" ? "Phonetic intermediate" : "Exact recovered intermediate"}</h3><pre id="intermediate-result">{intermediate || "Run the recipe to inspect the intermediate text."}</pre></div>
                   <div>
                     <h3>{direction === "encode" ? "Final ciphertext" : "Suggested English (not verified)"}</h3>
-                    <pre id="cipher-result">{output || (direction === "decode" && intermediate ? "No compatible English suggestion found." : "No result yet.")}</pre>
+                    {direction === "decode" && reconstruction?.suggested &&
+                      output === reconstruction.suggested &&
+                      reconstruction.words.length === output.split(/\s+/).length ? (
+                      <div className="english-phrase" id="cipher-result" aria-label="Suggested English sentence">
+                        {reconstruction.words.map((word, index) => (
+                          <span key={index + "-" + word.transformed}>
+                            {index > 0 ? " " : ""}
+                            {word.compatibleCount > 1 ? (
+                              <button type="button" className="selectable-word"
+                                aria-label={"Choose a different word for " + word.suggested + ", word " + (index + 1)}
+                                aria-expanded={selectedWord === index}
+                                onClick={() => setSelectedWord(selectedWord === index ? null : index)}
+                                disabled={choosing || busy} title={"Word " + (index + 1) + ": " + word.compatibleCount + " possible readings"}>
+                                {word.suggested}
+                              </button>
+                            ) : word.suggested}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <pre id="cipher-result">{output || (direction === "decode" && intermediate ? "No compatible English suggestion found." : "No result yet.")}</pre>
+                    )}
+                    {direction === "decode" && selectedWord !== null &&
+                      reconstruction?.words[selectedWord] && (
+                      <div className="word-choice-panel" role="group"
+                        aria-label={"Choose word " + (selectedWord + 1)}>
+                        <div className="word-choice-heading">
+                          <strong>Word {selectedWord + 1}: <code>{reconstruction.words[selectedWord].transformed}</code></strong>
+                          <button onClick={() => setSelectedWord(null)} aria-label="Close word choices">×</button>
+                        </div>
+                        <div className="word-option-buttons">
+                          {wordOptions(reconstruction.words[selectedWord]).map(candidate => (
+                            <button type="button" key={candidate}
+                              className={reconstruction.words[selectedWord].suggested === candidate ? "current" : ""}
+                              aria-pressed={reconstruction.words[selectedWord].suggested === candidate}
+                              aria-label={"Use " + candidate + " for word " + (selectedWord + 1)}
+                              onClick={() => chooseCandidate(selectedWord, candidate)}
+                              disabled={choosing || busy}>{candidate}</button>
+                          ))}
+                        </div>
+                        <small>Selections are checked against the rest of the message.</small>
+                      </div>
+                    )}
                     {direction === "decode" && intermediate && (
                       <>
-                        <p className="reconstruction-warning">The cipher can verify the transformed text, not which original words were intended. Alternatives below may fit the same encoding.</p>
-                        <label htmlFor="english-edit" className="english-edit-label">Edit the suggested words if needed</label>
+                        <p className="reconstruction-warning">Click an underlined word in the English suggestion, or choose a candidate in the inspector. Each selection is checked against the full phonetic rotation; the original English still cannot be proven.</p>
+                        <label htmlFor="english-edit" className="english-edit-label">Manual interpretation (candidate selections replace manual edits)</label>
                         <textarea id="english-edit" aria-label="Edit suggested English" value={output}
                           onChange={event => setOutput(event.target.value)} spellCheck={true} rows={2}
                           placeholder="Enter your preferred English interpretation..." />
@@ -208,7 +321,15 @@ function App() {
                     )}
                   </div>
                 </div>
-                <div className="notebook-actions"><span>{detail || "No run recorded"}</span><button disabled={!output} onClick={() => void copy(output)}>{direction === "decode" ? "Copy English suggestion" : "Copy result"}</button></div>
+                <div className="notebook-actions">
+                  <span>{choosing ? "Rechecking the selected words and subsequent rotations…" : (detail || "No run recorded")}</span>
+                  {direction === "decode" && lockedChoices.length > 0 && (
+                    <button disabled={choosing || busy} onClick={() => void reviseChoices([])}>Reset word selections ({lockedChoices.length})</button>
+                  )}
+                  <button disabled={!output || choosing} onClick={() => void copy(output)}>
+                    {direction === "decode" ? "Copy English suggestion" : "Copy result"}
+                  </button>
+                </div>
               </article>
             </section>
             <aside className="inspector">
@@ -238,12 +359,25 @@ function App() {
                 <div className="inspector-block">
                   <h3>Candidate word expansions</h3>
                   <p>{reconstruction.note}</p>
-                  {reconstruction.words.filter(w => w.compatibleCount > 1).map((word, i) => (
-                    <div key={word.transformed + i} className="reconstruction-word">
-                      <div><code>{word.transformed}</code><span>→ {word.suggested}</span></div>
-                      <small>{word.compatibleCount} possible dictionary matches
-                        {word.alternatives.length > 0 ? ": " + word.alternatives.join(", ") : ""}
-                      </small>
+                  {reconstruction.words.map((word, index) => word.compatibleCount > 1 && (
+                    <div key={index + "-" + word.transformed} className="reconstruction-word">
+                      <div><code>{word.transformed}</code><span>→ {word.suggested}</span>
+                        {lockedChoices.some(c => c.index === index) && <small className="locked-word">Selected</small>}
+                      </div>
+                      <small>Word {index + 1} · {word.compatibleCount} compatible dictionary readings (showing top options)</small>
+                      <div className="candidate-options" role="group"
+                        aria-label={"Candidates for word " + (index + 1) + " (" + word.transformed + ")"}>
+                        {wordOptions(word).map(candidate => (
+                          <button type="button" key={candidate}
+                            className={candidate === word.suggested ? "candidate-current" : ""}
+                            aria-pressed={candidate === word.suggested}
+                            aria-label={"Use " + candidate + " for word " + (index + 1)}
+                            disabled={busy || choosing}
+                            onClick={() => chooseCandidate(index, candidate)}>
+                            {candidate}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
