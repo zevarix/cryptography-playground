@@ -1,4 +1,5 @@
 //! Full-inventory US-English phoneme experiment (not secure encryption).
+mod recovery;
 use serde::Serialize;
 use std::{collections::HashMap, sync::OnceLock};
 
@@ -17,6 +18,7 @@ pub struct Encoded {
 #[derive(Debug, Serialize)]
 pub struct Decoded {
     pub intermediate: String,
+    pub reconstruction: recovery::Reconstruction,
 }
 
 fn key(s: &str) -> Result<String, String> {
@@ -192,8 +194,11 @@ pub fn decode(ciphertext: &str, passphrase: &str) -> Result<Decoded, String> {
     {
         return Err("Ciphertext must contain only letters and whitespace.".into());
     }
+    let intermediate = shift(ciphertext, &key, true)?;
+    let reconstruction = recovery::reconstruct(&intermediate, &key);
     Ok(Decoded {
-        intermediate: shift(ciphertext, &key, true)?,
+        intermediate,
+        reconstruction,
     })
 }
 #[cfg(test)]

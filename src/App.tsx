@@ -9,7 +9,18 @@ import "./App.css";
 type Page = "workbench" | "appearance" | "general" | "about";
 type Direction = "encode" | "decode";
 type Encoded = { ciphertext: string; intermediate: string; words: number; phonemes: number };
-type Decoded = { intermediate: string };
+type RecoveryWord = {
+  transformed: string;
+  suggested: string;
+  alternatives: string[];
+  compatibleCount: number;
+};
+type Reconstruction = {
+  suggested: string | null;
+  words: RecoveryWord[];
+  note: string;
+};
+type Decoded = { intermediate: string; reconstruction: Reconstruction };
 
 const STAGES = [
   { title: "Pronunciation lookup", detail: "Resolve dictionary-supported US-English phonemes", reversible: false },
@@ -35,6 +46,7 @@ function App() {
   const [passphrase, setPassphrase] = useState("spectacular");
   const [output, setOutput] = useState("");
   const [intermediate, setIntermediate] = useState("");
+  const [reconstruction, setReconstruction] = useState<Reconstruction | null>(null);
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
   const [inspected, setInspected] = useState<"intermediate" | "ciphertext">("intermediate");
@@ -62,7 +74,7 @@ function App() {
     setAppearance(current => ({ ...current, ...patch }));
   }
   function clearResults() {
-    setOutput(""); setIntermediate(""); setDetail(""); setMessage("");
+    setOutput(""); setIntermediate(""); setReconstruction(null); setDetail(""); setMessage("");
   }
   async function run() {
     setBusy(true); setMessage("");
@@ -70,6 +82,7 @@ function App() {
       if (direction === "encode") {
         const result = await invoke<Encoded>("encode_message", { text: plaintext, key: passphrase });
         setOutput(result.ciphertext);
+        setReconstruction(null);
         setCiphertext(result.ciphertext);
         setIntermediate(result.intermediate);
         setInspected("intermediate");
@@ -77,14 +90,17 @@ function App() {
         setMessage("Encoded successfully.");
       } else {
         const result = await invoke<Decoded>("decode_message", { ciphertext, key: passphrase });
-        setOutput(result.intermediate);
+        setOutput(result.reconstruction.suggested ?? "");
         setIntermediate(result.intermediate);
-        setInspected("intermediate");
-        setDetail("Recovered pre-shift text, not the original plaintext");
-        setMessage("Position shift reversed.");
+        setReconstruction(result.reconstruction);
+        setInspected("ciphertext");
+        setDetail(result.reconstruction.note);
+        setMessage(result.reconstruction.suggested
+          ? "Shift reversed; English is only a suggested reconstruction."
+          : "Shift reversed, but no English reconstruction could be verified against the phonetic rules.");
       }
     } catch (error) {
-      setOutput(""); setIntermediate(""); setDetail("");
+      setOutput(""); setIntermediate(""); setReconstruction(null); setDetail("");
       setMessage(String(error));
     } finally { setBusy(false); }
   }
@@ -139,7 +155,7 @@ function App() {
               <div className="sidebar-title"><h2>Experiment</h2><small>001 · unsaved</small></div>
               <label className="input-caption" htmlFor="operation-mode">Direction</label>
               <select id="operation-mode" value={direction} onChange={e => { setDirection(e.target.value as Direction); clearResults(); }}>
-                <option value="encode">Encode plaintext</option><option value="decode">Decode ciphertext</option>
+                <option value="encode">Encode plaintext</option><option value="decode">Decode / reconstruct English</option>
               </select>
               <label htmlFor="source-input" className="input-caption">{direction === "encode" ? "Plaintext" : "Ciphertext"}</label>
               <textarea id="source-input" rows={8} spellCheck={false} value={source} onChange={e => {
@@ -151,7 +167,7 @@ function App() {
               <input id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
                 onChange={e => { setPassphrase(e.target.value); clearResults(); }} />
               <p className="helper-text">The current prototype accepts a manually selected letter-only key.</p>
-              <button className="sidebar-run" onClick={() => void run()} disabled={busy || !source.trim() || !passphrase.trim()}>▶ {direction === "encode" ? "Encode" : "Reverse shift"}</button>
+              <button className="sidebar-run" onClick={() => void run()} disabled={busy || !source.trim() || !passphrase.trim()}>▶ {direction === "encode" ? "Encode" : "Decode / suggest English"}</button>
               <div className="sidebar-note">
                 <strong>Experimental only</strong>
                 <p>The lossy recipe cannot restore the exact original English. Never use it for real data security.</p>
@@ -177,17 +193,29 @@ function App() {
                 </ol>
                 <h2>Transformation results</h2>
                 <div className="result-grid">
-                  <div><h3>Phonetic intermediate</h3><pre id="intermediate-result">{intermediate || "Run the recipe to inspect the intermediate text."}</pre></div>
-                  <div><h3>{direction === "encode" ? "Final ciphertext" : "Recovered intermediate"}</h3><pre id="cipher-result">{output || "No result yet."}</pre></div>
+                  <div><h3>{direction === "encode" ? "Phonetic intermediate" : "Exact recovered intermediate"}</h3><pre id="intermediate-result">{intermediate || "Run the recipe to inspect the intermediate text."}</pre></div>
+                  <div>
+                    <h3>{direction === "encode" ? "Final ciphertext" : "Suggested English (not verified)"}</h3>
+                    <pre id="cipher-result">{output || (direction === "decode" && intermediate ? "No compatible English suggestion found." : "No result yet.")}</pre>
+                    {direction === "decode" && intermediate && (
+                      <>
+                        <p className="reconstruction-warning">The cipher can verify the transformed text, not which original words were intended. Alternatives below may fit the same encoding.</p>
+                        <label htmlFor="english-edit" className="english-edit-label">Edit the suggested words if needed</label>
+                        <textarea id="english-edit" aria-label="Edit suggested English" value={output}
+                          onChange={event => setOutput(event.target.value)} spellCheck={true} rows={2}
+                          placeholder="Enter your preferred English interpretation..." />
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="notebook-actions"><span>{detail || "No run recorded"}</span><button disabled={!output} onClick={() => void copy(output)}>Copy result</button></div>
+                <div className="notebook-actions"><span>{detail || "No run recorded"}</span><button disabled={!output} onClick={() => void copy(output)}>{direction === "decode" ? "Copy English suggestion" : "Copy result"}</button></div>
               </article>
             </section>
             <aside className="inspector">
               <h2>Inspector</h2>
               <div className="inspector-tabs" role="group" aria-label="Inspected result">
                 <button className={inspected === "intermediate" ? "active" : ""} onClick={() => setInspected("intermediate")}>Intermediate</button>
-                <button className={inspected === "ciphertext" ? "active" : ""} onClick={() => setInspected("ciphertext")}>Output</button>
+                <button className={inspected === "ciphertext" ? "active" : ""} onClick={() => setInspected("ciphertext")}>{direction === "decode" ? "English guess" : "Output"}</button>
               </div>
               <div className="inspector-block"><h3>Selected result</h3><pre>{inspectText || "No result to inspect."}</pre></div>
               <div className="inspector-block"><h3>Properties</h3>
@@ -206,7 +234,21 @@ function App() {
                   </div>)}
                 </div>
               </div>
-              <div className="inspector-block"><h3>Reversibility</h3><p>The shift is reversible with the key. Pronunciation, vowel runs, punctuation, and casing are intentionally lossy.</p></div>
+              {direction === "decode" && reconstruction && (
+                <div className="inspector-block">
+                  <h3>Candidate word expansions</h3>
+                  <p>{reconstruction.note}</p>
+                  {reconstruction.words.filter(w => w.compatibleCount > 1).map((word, i) => (
+                    <div key={word.transformed + i} className="reconstruction-word">
+                      <div><code>{word.transformed}</code><span>→ {word.suggested}</span></div>
+                      <small>{word.compatibleCount} possible dictionary matches
+                        {word.alternatives.length > 0 ? ": " + word.alternatives.join(", ") : ""}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="inspector-block"><h3>Reversibility</h3><p>The shift is reversible with the key. Phonetic normalization and vowel runs are lossy; the English suggestion is speculative, even when re-encoding a candidate matches.</p></div>
             </aside>
           </main>
         ) : (

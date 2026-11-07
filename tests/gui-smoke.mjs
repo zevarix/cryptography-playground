@@ -33,7 +33,16 @@ try {
         if (command === "encode_message") return {
           ciphertext: "fixturecipher", intermediate: "fixtureintermediate", words: 9, phonemes: 32,
         };
-        if (command === "decode_message") return { intermediate: "fixtureintermediate" };
+        if (command === "decode_message") return {
+          intermediate: "fixtureintermediate",
+          reconstruction: {
+            suggested: "the quick brown fox jumps over the lazy dog",
+            note: "Speculative expansion. 1 word has several valid matches.",
+            words: [
+              { transformed: "fucc", suggested: "fox", alternatives: ["fix", "fax"], compatibleCount: 3 },
+            ],
+          },
+        };
         throw new Error("Unexpected command: " + command);
       },
     };
@@ -48,10 +57,18 @@ try {
   const pngWorkbench = resolve(artifacts, "notebook-workbench-desktop.png");
   await page.screenshot({ path: pngWorkbench, fullPage: true, animations: "disabled" });
   await page.locator("#operation-mode").selectOption("decode");
-  await page.getByRole("button", { name: /Reverse shift/ }).click();
-  assert.equal(await page.locator("#cipher-result").innerText(), "fixtureintermediate");
+  await page.getByRole("button", { name: /Decode \/ suggest English/ }).click();
+  assert.equal(await page.locator("#intermediate-result").innerText(), "fixtureintermediate");
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
+  assert.match(await page.locator(".reconstruction-warning").innerText(), /not verified|cannot verify|not which original/);
+  assert.match(await page.locator(".reconstruction-word").innerText(), /fix, fax/);
+  const pngDecode = resolve(artifacts, "notebook-decoder-english-suggestion.png");
+  await page.screenshot({ path: pngDecode, fullPage: true, animations: "disabled" });
+  const editableEnglish = page.getByRole("textbox", { name: "Edit suggested English" });
+  await editableEnglish.fill("the quick brown fix jumps over the lazy dog");
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fix jumps over the lazy dog");
   await page.locator("#passphrase").fill("incorrect");
-  await page.getByRole("button", { name: /Reverse shift/ }).click();
+  await page.getByRole("button", { name: /Decode \/ suggest English/ }).click();
   assert.match(await page.locator('[role="status"]').innerText(), /incorrect key/);
 
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
@@ -94,10 +111,11 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: ["workbench render", "encode invoke", "decode invoke", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: ["workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
       { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
       { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },
+      { path: pngDecode, bytes: (await stat(pngDecode)).size },
       { path: pngMobile, bytes: (await stat(pngMobile)).size },
     ],
     bridge: "mocked (not native IPC acceptance)",

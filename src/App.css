@@ -199,3 +199,55 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .mode-choices button { min-width:0; flex:1; padding:5px 2px; }
   .accent-choices, .color-choice { justify-content:flex-start; }
 }
+
+/* Lossy reconstruction is deliberately separate from confirmed shift reversal. */
+.reconstruction-warning {
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--app-warning);
+  background: var(--app-panel);
+  color: var(--app-muted);
+}
+.english-edit-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--app-muted);
+  margin: 10px 0 7px;
+}
+#english-edit {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  padding: 11px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-panel);
+  color: var(--app-text);
+  font: 12px/1.5 "SFMono-Regular", Consolas, monospace;
+}
+.reconstruction-word {
+  padding: 11px 0;
+  border-top: 1px solid var(--app-border);
+}
+.reconstruction-word > div {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.reconstruction-word code {
+  font: 11px/1.5 Consolas, monospace;
+  color: var(--app-accent);
+}
+.reconstruction-word span {
+  font-weight: 620;
+  font-size: 12px;
+}
+.reconstruction-word small {
+  display: block;
+  color: var(--app-muted);
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}

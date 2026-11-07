@@ -21,6 +21,14 @@ The community theme choices are adapted palettes from independent developer-them
 
 The native cipher engine still uses Recipe 001 with a manually chosen key. Appearance controls are implemented; more recipe choices, experiment management, and linguistic recovery remain future work.
 
+## Best-effort decoding
+
+With the correct key, the reversible shift yields the exact phonetic intermediate text. The decoder now offers a **speculative English reconstruction** by matching dictionary pronunciations against the actual key-driven rotation counters. When multiple originals share the same lossy transform, it presents alternatives and allows editing; it does not claim to know the original spelling or punctuation.
+
+For example, **fox** and **fix** can produce the same transformed word `fucc` and the same ciphertext under Recipe 001. The top-ranked suggestion may be wrong. For large or unsupported inputs, the exact intermediate remains available even if the English reconstruction fails.
+
+The optional word-ranking data is derived from wordfreq and distributed with its attribution and notice: [reconstruction data provenance](src-tauri/data/NOTICE-english-frequency.md). The desktop application needs no Python runtime.
+
 ## Development
 
 ```sh

@@ -22,6 +22,10 @@ The current implementation is a working foundation, with a **manual passphrase**
 - Vowels, punctuation, source graphemes and capitalization are destroyed. Plaintext recovery requires inference and may have multiple solutions.
 - The exact input/output algorithm is subject to revision until the recipe reaches a versioned, reviewed specification.
 
+## Decoding and uncertainty
+
+Decode first reverses the shift to recover the intermediate exactly. The program then searches dictionary pronunciations against the current key and tracked global rotation counters to find possible original words. A bounded beam search ranks compatible phrases by an offline word-frequency heuristic. The best suggestion is **not** a confirmed plaintext; ambiguity is intrinsic because several original phoneme sequences can yield the same intermediate. Candidate alternatives are local to the chosen reconstructed prefix and may influence subsequent rotation states. Long or unknown messages may have no candidate; the exact intermediate is preserved.
+
 ## Roadmap
 
 - Select the longest adjective from the source text with deterministic, documented lexical rules and fallback for ambiguity.
