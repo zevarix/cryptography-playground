@@ -90,7 +90,13 @@ function App() {
     reversible: !lossyRule(step.rule),
   })) ?? [];
   const source = direction === "encode" ? plaintext : ciphertext;
-  const inspectText = inspected === "intermediate" ? intermediate : output;
+  const isReversibleRecipe = stages.length > 0 && stages.every(stage => stage.reversible);
+  const isExactDecode = direction === "decode" && isReversibleRecipe && exactOutput;
+  const activeBaseline = activeRecipe && [...saved, ...builtins].find(recipe => recipe.id === activeRecipe.id);
+  const activeIsUnsaved = !!activeRecipe &&
+    (!activeBaseline || JSON.stringify(activeRecipe) !== JSON.stringify(activeBaseline));
+  const inspectText = isExactDecode ? output :
+    (inspected === "intermediate" ? intermediate : output);
   const bars = useMemo(() => frequencies(inspectText), [inspectText]);
   const total = bars.reduce((sum, count) => sum + count, 0);
 
@@ -247,7 +253,12 @@ function App() {
       <header className="topbar">
         <div className="brand"><span className="brand-icon">⌁</span><strong>Cryptography Playground</strong><span className="brand-division">/ Notebook Lab</span></div>
         <div className="top-controls">
-          <span className="recipe-name">{activeRecipe?.name ?? "Loading recipes…"}</span>
+          <span className="recipe-name">{activeRecipe?.name ?? "Loading recipes."}</span>
+          {activeIsUnsaved && page === "workbench" && (
+            <span className="recipe-unsaved-top" title="This recipe configuration has not been saved and will not survive an app restart.">
+              Unsaved draft
+            </span>
+          )}
           <button className="top-run" onClick={() => void run()} disabled={!activeRecipe || !source.trim() || (needsKey && !passphrase.trim()) || busy || choosing}>▶ {busy ? "Running" : "Run"}</button>
           <button onClick={() => setPage("appearance")} aria-label="Appearance settings" title="Appearance settings">⚙</button>
         </div>
@@ -267,6 +278,17 @@ function App() {
               <div className="sidebar-title"><h2>Experiment</h2>
                 <button className="recipe-change" onClick={() => setPage("recipes")}>{activeRecipe?.name ?? "Choose a recipe"} ↗</button>
               </div>
+              {activeIsUnsaved ? (
+                <div className="recipe-save-state unsaved" role="status">
+                  <strong>Unsaved recipe</strong>
+                  <span>Rule changes won't survive restarting the app.</span>
+                  <button onClick={() => setPage("recipes")}>Save this recipe</button>
+                </div>
+              ) : activeRecipe ? (
+                <div className="recipe-save-state">
+                  <span>{activeRecipe.id.startsWith("builtin-") ? "Bundled example" : "Saved locally on this computer"}</span>
+                </div>
+              ) : null}
               <label className="input-caption" htmlFor="operation-mode">Direction</label>
               <select id="operation-mode" value={direction} onChange={e => { setDirection(e.target.value as Direction); clearResults(); }}>
                 <option value="encode">Encode plaintext</option><option value="decode">{stages.every(s => s.reversible) ? "Decode exactly" : "Decode / reconstruct English"}</option>
@@ -315,9 +337,13 @@ function App() {
                 </ol>
                 <h2>Transformation results</h2>
                 <div className="result-grid">
-                  <div><h3>{direction === "encode" ? "Last intermediate stage" : (exactOutput ? "Decoded text" : "Exact surviving intermediate")}</h3><pre id="intermediate-result">{intermediate || "Run the recipe to inspect the intermediate text."}</pre></div>
+                  {(direction === "decode" ? !isReversibleRecipe : stageOutputs.length > 1) && (
+                    <div><h3>{direction === "encode" ? "Last intermediate stage" : "Exact surviving intermediate"}</h3>
+                      <pre id="intermediate-result">{intermediate || "Run the recipe to inspect the intermediate text."}</pre>
+                    </div>
+                  )}
                   <div>
-                    <h3>{direction === "encode" ? "Final ciphertext" : exactOutput ? "Exact decoded plaintext" : "Suggested English (not verified)"}</h3>
+                    <h3>{direction === "encode" ? "Final ciphertext" : isReversibleRecipe ? "Exact decoded plaintext" : "Suggested English (not verified)"}</h3>
                     {direction === "decode" && reconstruction?.suggested &&
                       output === reconstruction.suggested &&
                       reconstruction.words.length === output.split(/\s+/).length ? (
@@ -361,7 +387,7 @@ function App() {
                         <small>Selections are checked against the rest of the message.</small>
                       </div>
                     )}
-                    {direction === "decode" && intermediate && reconstruction && (
+                    {direction === "decode" && !isReversibleRecipe && intermediate && reconstruction && (
                       <>
                         <p className="reconstruction-warning">Click an underlined word in the English suggestion, or choose a candidate in the inspector. Each selection is checked against the full phonetic rotation; the original English still cannot be proven.</p>
                         <label htmlFor="english-edit" className="english-edit-label">Manual interpretation (candidate selections replace manual edits)</label>
@@ -387,24 +413,33 @@ function App() {
                     <button disabled={choosing || busy} onClick={() => void reviseChoices([])}>Reset word selections ({lockedChoices.length})</button>
                   )}
                   <button disabled={!output || choosing} onClick={() => void copy(output)}>
-                    {direction === "decode" ? "Copy English suggestion" : "Copy result"}
+                    {direction === "decode" ? (isReversibleRecipe ? "Copy decoded text" : "Copy English suggestion") : "Copy result"}
                   </button>
                 </div>
               </article>
             </section>
             <aside className="inspector">
               <h2>Inspector</h2>
-              <div className="inspector-tabs" role="group" aria-label="Inspected result">
-                <button className={inspected === "intermediate" ? "active" : ""} onClick={() => setInspected("intermediate")}>Intermediate</button>
-                <button className={inspected === "ciphertext" ? "active" : ""} onClick={() => setInspected("ciphertext")}>{direction === "decode" ? "English guess" : "Output"}</button>
+              {isReversibleRecipe && direction === "decode" ? (
+                <div className="inspector-exact-status">{isExactDecode ? "Exact decoded result" : "Reversible recipe"}</div>
+              ) : (
+                <div className="inspector-tabs" role="group" aria-label="Inspected result">
+                  <button className={inspected === "intermediate" ? "active" : ""} onClick={() => setInspected("intermediate")}>Intermediate</button>
+                  <button className={inspected === "ciphertext" ? "active" : ""} onClick={() => setInspected("ciphertext")}>
+                    {direction === "decode" ? "English suggestion" : "Output"}
+                  </button>
+                </div>
+              )}
+              <div className="inspector-block"><h3>{isExactDecode ? "Exact plaintext" : "Selected result"}</h3>
+                <pre>{inspectText || "No result to inspect."}</pre>
               </div>
-              <div className="inspector-block"><h3>Selected result</h3><pre>{inspectText || "No result to inspect."}</pre></div>
               <div className="inspector-block"><h3>Properties</h3>
                 <dl className="data-rows">
                   <div><dt>Characters</dt><dd>{inspectText.length}</dd></div>
                   <div><dt>Letters</dt><dd>{total}</dd></div>
-                  <div><dt>Original length</dt><dd>{source.length}</dd></div>
-                  <div><dt>Recipe</dt><dd>001</dd></div>
+                  <div><dt>Input length</dt><dd>{source.length}</dd></div>
+                  <div><dt>Recipe</dt><dd>{activeRecipe?.name ?? "Not selected"}</dd></div>
+                  <div><dt>Rules enabled</dt><dd>{stages.length}</dd></div>
                 </dl>
               </div>
               <div className="inspector-block"><h3>Frequency analysis</h3>

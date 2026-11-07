@@ -99,7 +99,16 @@ try {
   const pngRecipes = resolve(artifacts, "recipe-library-and-builder.png");
   await page.screenshot({ path: pngRecipes, fullPage: true, animations: "disabled" });
   await page.getByRole("button", { name: /Word Mirror/ }).click();
+  assert.match(await page.locator(".recipe-edit-status").innerText(), /Bundled example/);
+  await page.locator("#shift-base-1").fill("7");
+  assert.match(await page.locator(".recipe-edit-status").innerText(), /Unsaved changes/);
   await page.getByRole("button", { name: "Use in workbench" }).click();
+  assert.match(await page.locator(".recipe-save-state").innerText(), /Unsaved recipe/);
+  assert.match(await page.locator(".recipe-save-state").innerText(), /restarting/);
+  await page.getByRole("button", { name: "Save this recipe" }).click();
+  assert.match(await page.locator(".recipe-edit-status").innerText(), /Unsaved changes/);
+  await page.getByRole("button", { name: "Save a copy" }).click();
+  assert.match(await page.locator(".recipe-save-state").innerText(), /Saved locally on this computer/);
   await page.locator("#passphrase").fill("");
   assert.equal(await page.getByRole("button", { name: /Encode/ }).isDisabled(), false);
   await page.getByRole("button", { name: /Encode/ }).click();
@@ -107,14 +116,25 @@ try {
   await page.locator("#operation-mode").selectOption("decode");
   await page.getByRole("button", { name: /Decode exactly/ }).click();
   assert.equal(await page.locator("#cipher-result").innerText(), "The quick brown fox jumps over the lazy dog.");
+  assert.equal(await page.locator("#intermediate-result").count(), 0, "Exact decode must not duplicate the output");
+  assert.equal(await page.locator(".result-grid > div").count(), 1);
+  assert.match(await page.locator(".inspector-exact-status").innerText(), /Exact decoded result/);
+  assert.equal(await page.locator(".inspector-tabs").count(), 0);
+  assert.match(await page.locator(".data-rows").innerText(), /Word Mirror/);
+  assert.match(await page.getByRole("button", { name: "Copy decoded text" }).innerText(), /Copy decoded text/);
   assert.equal(await page.locator(".reconstruction-warning").count(), 0);
+  const pngExact = resolve(artifacts, "notebook-exact-decode-no-duplicates.png");
+  await page.screenshot({ path: pngExact, fullPage: true, animations: "disabled" });
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   await page.getByRole("button", { name: "Create a new recipe" }).click();
+  assert.match(await page.locator(".recipe-edit-status").innerText(), /Unsaved recipe/);
   await page.locator("#recipe-name").fill("My Custom Cipher");
   await page.locator("#rule-0").selectOption("remove_vowels");
   await page.getByRole("button", { name: "Save recipe" }).click();
+  assert.match(await page.locator(".recipe-save-state").innerText(), /Saved locally on this computer/);
   await page.reload({ waitUntil: "networkidle" });
   assert.match(await page.locator("h1").innerText(), /Experiment: My Custom Cipher/);
+  assert.match(await page.locator(".recipe-save-state").innerText(), /Saved locally on this computer/);
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   assert.ok(await page.getByRole("button", { name: /My Custom Cipher/ }).count() > 0);
   await page.getByRole("button", { name: /My Custom Cipher/ }).click();
@@ -232,11 +252,12 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: [ "recipe selection", "reversible exact decode", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: [  "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
       { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
       { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },
       { path: pngRecipes, bytes: (await stat(pngRecipes)).size },
+      { path: pngExact, bytes: (await stat(pngExact)).size },
       { path: pngDecode, bytes: (await stat(pngDecode)).size },
       { path: pngMobile, bytes: (await stat(pngMobile)).size },
     ],

@@ -447,3 +447,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .recipe-library { flex:none; border-right:0; border-bottom:1px solid var(--app-border); max-height:220px; }
   .recipe-rule-main { flex-wrap:wrap; }
 }
+/* Recipe save state and exact-decode presentation. */
+.recipe-save-state { margin: 0 0 20px; padding: 10px 11px; border: 1px solid var(--app-border); border-radius: 7px; display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--app-muted); background: var(--app-panel); }
+.recipe-save-state strong { color: var(--app-warning); font-size: 12px; }
+.recipe-save-state.unsaved { border-left: 3px solid var(--app-warning); }
+.recipe-save-state button { background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 6px; padding: 7px 9px; align-self: flex-start; font-size: 11px; font-weight: 650; }
+.recipe-save-state button:hover { border-color: var(--app-accent); }
+.recipe-edit-status { margin: 10px 0 0 !important; color: var(--app-success) !important; font-size: 11px !important; font-weight: 650; }
+.recipe-edit-status.unsaved { color: var(--app-warning) !important; }
+.recipe-unsaved-top { border: 1px solid var(--app-warning); color: var(--app-warning); border-radius: 5px; padding: 4px 7px; font-size: 10px; white-space: nowrap; }
+.inspector-exact-status { padding: 10px 3px; color: var(--app-success); border-bottom: 1px solid var(--app-border); font-size: 11px; font-weight: 650; }
+.data-rows dd { text-align: right; max-width: 65%; overflow-wrap: anywhere; }
+@media(max-width:850px) { .recipe-unsaved-top { display: none; } }

@@ -31,7 +31,14 @@ export default function RecipePage({
   }, [active]);
 
   const isBuiltin = draft.id.startsWith("builtin-");
-  const isSaved = saved.some(r => r.id === draft.id);
+  const referenceRecipe = saved.find(recipe => recipe.id === draft.id)
+    ?? builtins.find(recipe => recipe.id === draft.id);
+  const isSaved = saved.some(recipe => recipe.id === draft.id);
+  const hasUnsavedChanges = !referenceRecipe ||
+    JSON.stringify(draft) !== JSON.stringify(referenceRecipe);
+  const recipeSaveLabel = hasUnsavedChanges
+    ? (isSaved || isBuiltin ? "Unsaved changes" : "Unsaved recipe")
+    : isBuiltin ? "Bundled example" : "Saved locally";
   const processing = saving || busy;
   const update = (change: Partial<Recipe>) => { setDraft(current => ({ ...current, ...change })); setLocalError(""); };
   const updateStep = (index: number, change: Partial<Step>) => {
@@ -134,6 +141,11 @@ export default function RecipePage({
             <span className="section-kicker">RECIPE EDITOR · SCHEMA 1</span>
             <h1>{isBuiltin ? "Customize a bundled recipe" : "Build your own recipe"}</h1>
             <p>Compose and configure rules; the order determines the transformation.</p>
+            <p className={"recipe-edit-status" + (hasUnsavedChanges ? " unsaved" : "")}
+              role="status" aria-label="Recipe save status">
+              {recipeSaveLabel}
+              {hasUnsavedChanges && " · Save to keep this version after restarting."}
+            </p>
           </div>
           <div className="recipe-editor-actions">
             <button onClick={duplicate} disabled={processing}>Duplicate</button>

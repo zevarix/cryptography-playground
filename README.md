@@ -41,6 +41,8 @@ The Rust rule engine now loads bundled example recipes from versioned JSON files
 
 The built-ins are Recipe 001 Phonetic Rotation (previous output preserved), Recipe 002 Consonant Skeleton (lossy), Recipe 003 Word Mirror (reversible), and Recipe 004 Pair Swap + Vowel Rotation (reversible). Decoding applies reversible operations backward. Candidate reconstruction is available only for explicitly supported lossy combinations.
 
+The editor identifies bundled examples, saved local recipes, and unsaved changes. Running a modified or newly created recipe without saving displays an **Unsaved recipe** notice and a shortcut back to the editor: those in-memory changes will be lost when the application restarts. Exact reversible decoding presents one plaintext result and uses the active recipe's name in the inspector, while lossy recipes retain the surviving intermediate and speculative English suggestion separately.
+
 See docs/recipe-format.md for the schema and storage model.
 
 ## Development
