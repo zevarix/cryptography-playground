@@ -13,6 +13,14 @@ An independent, experimental Rust + Tauri desktop application for composing, tes
 
 Recipe 001 will use the Carnegie Mellon Pronouncing Dictionary, with the original BSD-style license retained under `src-tauri/data/LICENSE-cmudict`. Unknown dictionary words must fail explicitly rather than silently using guessed pronunciation.
 
+## Notebook Lab interface
+
+The experimental desktop workbench combines a compact source editor, a step-by-step phonetic transformation notebook, and a result inspector. Appearance settings follow a desktop-style layout with an icon rail, searchable settings list, and a main preferences panel. System/light/dark mode, theme, accent, background/foreground, and font selections apply to the workbench and persist locally.
+
+The community theme choices are adapted palettes from independent developer-theme projects (Catppuccin, Dracula, Gruvbox, Ayu, GitHub Primer, and Everforest); see [theme attribution and sources](docs/theme-attributions.md). They are not a dependency on any other application.
+
+The native cipher engine still uses Recipe 001 with a manually chosen key. Appearance controls are implemented; more recipe choices, experiment management, and linguistic recovery remain future work.
+
 ## Development
 
 ```sh
