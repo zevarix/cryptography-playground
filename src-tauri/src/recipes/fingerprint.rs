@@ -58,7 +58,7 @@ pub fn fingerprint(recipe: &Recipe) -> Result<RecipeFingerprint, String> {
     Ok(RecipeFingerprint {
         algorithm: "SHA-256",
         version: 1,
-        display: format!("CP-R1-{}", &value[..16]),
+        display: format!("CRYPT-R1-{}", &value[..16]),
         value,
     })
 }
@@ -155,7 +155,7 @@ mod tests {
         assert_eq!(id.algorithm, "SHA-256");
         assert_eq!(id.version, 1);
         assert_eq!(id.value.len(), 64);
-        assert_eq!(id.display.len(), 22);
+        assert_eq!(id.display.len(), 25);
         // A cross-platform golden digest fixes canonical serialization and
         // domain separation; changing it requires an explicit new version.
         assert_eq!(

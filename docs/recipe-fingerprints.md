@@ -2,16 +2,16 @@
 
 A recipe is a versioned JSON configuration describing the sequence of rules to run. This project experimentally treats the configuration and a passphrase as separate inputs; **neither the recipe nor the passphrase makes these classical/linguistic ciphers secure**.
 
-## Configuration fingerprint (CP-R1)
+## Configuration fingerprint (CRYPT-R1)
 
-The editor and workbench display a short code such as \`CP-R1-0123456789abcdef\` and offer a full 64-character SHA-256 digest for copying.
+The editor and workbench display a short code such as \`CRYPT-R1-0123456789abcdef\` and offer a full 64-character SHA-256 digest for copying.
 
 Version 1 is computed as follows:
 
 1. Parse recipe JSON into the typed Rust \`Recipe\` structure and validate the schema.
 2. Serialize exactly \`{"schemaVersion":1,"steps":[...]}\` using the stable declared order of the typed \`Step\` / \`Rule\` fields (compact UTF-8 JSON with no optional unspecified fields). All steps—including disabled ones—and their order/configuration are retained.
 3. SHA-256 the byte sequence \`cryptoplay:recipe-configuration:v1\\0\` followed by those canonical JSON bytes. The \`\\0\` here is one NUL byte.
-4. Present the full lowercase SHA-256 hex digest. The short comparison code is \`CP-R1-\` followed by its first 16 lowercase hex digits. **Use the full digest for meaningful equality checks; the short code is a convenience only.**
+4. Present the full lowercase SHA-256 hex digest. The short comparison code is \`CRYPT-R1-\` followed by its first 16 lowercase hex digits. **Use the full digest for meaningful equality checks; the short code is a convenience only.**
 
 The recipe's \`id\`, \`name\` and \`description\` are not hashed. That means users can rename or duplicate a configuration without changing its fingerprint. Changing a rule, its settings, enabled flags, or step order changes the fingerprint. Reordering JSON object properties does not change the fingerprint, because typed decoding normalizes their order.
 
