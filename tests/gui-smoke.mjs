@@ -43,7 +43,7 @@ try {
           const bytes = new TextEncoder().encode(content);
           const digest = await crypto.subtle.digest("SHA-256", bytes);
           const value = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
-          return { algorithm: "SHA-256", version: 1, value, display: "CP-R1-" + value.slice(0,16) };
+          return { algorithm: "SHA-256", version: 1, value, display: "CRYPT-R1-" + value.slice(0,16) };
         }
         if (command === "list_saved_recipes") return saved;
         if (command === "save_recipe") {
@@ -115,10 +115,10 @@ try {
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   const pngRecipes = resolve(artifacts, "recipe-library-and-builder.png");
   assert.equal(await page.locator(".recipe-library-entry").count(), 12);
-  await page.waitForFunction(() => document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent?.startsWith("CP-R1-"));
+  await page.waitForFunction(() => document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent?.startsWith("CRYPT-R1-"));
   await page.screenshot({ path: pngRecipes, fullPage: true, animations: "disabled" });
   const initialFingerprint = await page.locator('[data-testid="recipe-fingerprint"]').innerText();
-  assert.match(initialFingerprint, /^CP-R1-[0-9a-f]{16}$/);
+  assert.match(initialFingerprint, /^CRYPT-R1-[0-9a-f]{16}$/);
   assert.match(await page.locator('[data-testid="recipe-fingerprint"]').getAttribute("title"), /^[0-9a-f]{64}$/);
   await page.getByRole("button", { name: /Passphrase-Derived Layers/ }).click();
   assert.equal(await page.locator("#rule-0").inputValue(), "derived_caesar");
@@ -126,7 +126,7 @@ try {
   assert.match(await page.locator(".rule-key-note").first().innerText(), /derived at runtime/);
   await page.waitForFunction((previous) => {
     const displayed = document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent;
-    return displayed?.startsWith("CP-R1-") && displayed !== previous;
+    return displayed?.startsWith("CRYPT-R1-") && displayed !== previous;
   }, initialFingerprint);
   const derivedFingerprint = await page.locator('[data-testid="recipe-fingerprint"]').innerText();
   assert.notEqual(derivedFingerprint, initialFingerprint);
@@ -137,13 +137,13 @@ try {
   assert.equal(await page.locator('[data-testid="recipe-fingerprint"]').innerText(), derivedFingerprint, "Metadata/ID-only copy should preserve fingerprint");
   await page.locator("#rule-0").selectOption("caesar");
   await page.waitForFunction((previous) =>
-    !!document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent?.startsWith("CP-R1-") &&
+    !!document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent?.startsWith("CRYPT-R1-") &&
     document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent !== previous,
   derivedFingerprint);
   assert.notEqual(await page.locator('[data-testid="recipe-fingerprint"]').innerText(), derivedFingerprint);
   await page.getByRole("button", { name: /Passphrase-Derived Layers/ }).click();
   await page.getByRole("button", { name: "Use in workbench" }).click();
-  await page.waitForFunction(() => !!document.querySelector('[data-testid="active-recipe-fingerprint"]')?.textContent?.startsWith("CP-R1-"));
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="active-recipe-fingerprint"]')?.textContent?.startsWith("CRYPT-R1-"));
   assert.equal(await page.locator('[data-testid="active-recipe-fingerprint"]').innerText(), derivedFingerprint);
   await page.locator("#passphrase").fill("");
   assert.equal(await page.getByRole("button", { name: /Encode/ }).isDisabled(), true);

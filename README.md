@@ -53,7 +53,7 @@ Vigenere and Beaufort use the workbench passphrase without storing it inside the
 
 ## Recipe configuration fingerprints and derived parameters
 
-Each recipe has a reproducible \`CP-R1-...\` comparison code with a full SHA-256 fingerprint.
+Each recipe has a reproducible \`CRYPT-R1-...\` comparison code with a full SHA-256 fingerprint.
 The fingerprint is computed from its versioned, normalized rule steps, **not** its name,
 ID, description or passphrase. The editor updates it as rules change; the workbench shows
 the active recipe's fingerprint. This is a configuration identifier, not proof of
