@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   copyRecipe, createRule, lossyRule, newUserRecipe,
-  RULE_CATALOG, type Recipe, type Rule, type RuleKind, type Step,
+  RULE_CATALOG, type Recipe, type RecipeFingerprint, type Rule, type RuleKind, type Step,
 } from "./recipeTypes";
 
 type Props = {
@@ -27,6 +28,7 @@ function RuleOptions() {
       "caesar", "atbash", "vigenere", "beaufort", "affine",
     ] },
     { name: "Classical transposition (cifers)", types: ["rail_fence"] },
+    { name: "Passphrase-derived parameters", types: ["derived_caesar", "derived_rail_fence"] },
   ];
   return <>{groups.map(group => (
     <optgroup key={group.name} label={group.name}>
@@ -45,10 +47,21 @@ export default function RecipePage({
   const [importOpen, setImportOpen] = useState(false);
   const [localError, setLocalError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [fingerprint, setFingerprint] = useState<RecipeFingerprint | null>(null);
 
   useEffect(() => {
     if (active) setDraft(copyRecipe(active));
   }, [active]);
+  useEffect(() => {
+    let current = true;
+    setFingerprint(null);
+    const job = window.setTimeout(() => {
+      void invoke<RecipeFingerprint>("recipe_fingerprint", { recipe: draft })
+        .then(result => { if (current) setFingerprint(result); })
+        .catch(() => { if (current) setFingerprint(null); });
+    }, 180);
+    return () => { current = false; window.clearTimeout(job); };
+  }, [draft]);
 
   const isBuiltin = draft.id.startsWith("builtin-");
   const referenceRecipe = saved.find(recipe => recipe.id === draft.id)
@@ -186,6 +199,24 @@ export default function RecipePage({
           </label>
           {isBuiltin && <p className="recipe-notice">Bundled examples cannot be overwritten. Saving creates an independent, editable copy.</p>}
         </div>
+        <section className="recipe-fingerprint" aria-label="Recipe fingerprint">
+          <div>
+            <strong>Recipe configuration fingerprint</strong>
+            <p>Identifies the ordered rules and parameters, not its name or passphrase.
+              It is a comparison code, not a secret or proof of authenticity.</p>
+          </div>
+          <code title={fingerprint?.value ?? "Recipe configuration is invalid"} data-testid="recipe-fingerprint">
+            {fingerprint?.display ?? "Unavailable"}
+          </code>
+          <button type="button" disabled={!fingerprint} aria-label="Copy complete recipe fingerprint"
+            onClick={() => {
+              if (!fingerprint) return;
+              void navigator.clipboard.writeText(fingerprint.value).then(
+                () => onNotice("Full SHA-256 recipe fingerprint copied."),
+                () => onNotice("Unable to copy fingerprint. You can inspect it by hovering over the code.")
+              );
+            }}>Copy hash</button>
+        </section>
         <div className="recipe-rule-heading"><h2>Rules · {draft.steps.filter(step => step.enabled).length} enabled</h2>
           <span>Run top to bottom · Reverse bottom to top when possible</span></div>
         <ol className="recipe-step-list" aria-label="Ordered recipe rules">
@@ -280,6 +311,11 @@ export default function RecipePage({
                 )}
                 {(step.rule.type === "vigenere" || step.rule.type === "beaufort") && (
                   <p className="rule-key-note">Uses the workbench passphrase. No keyword is embedded in this recipe JSON.</p>
+                )}
+                {(step.rule.type === "derived_caesar" || step.rule.type === "derived_rail_fence") && (
+                  <p className="rule-key-note">Rule value is derived at runtime from the recipe configuration,
+                    this step's position, and the workbench passphrase. The passphrase is never saved in JSON.
+                    Resolved values appear in the transformation stages; this is for puzzles, not security.</p>
                 )}
               </div>
             </li>

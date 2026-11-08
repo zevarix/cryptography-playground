@@ -7,6 +7,7 @@ import {
 import RecipePage from "./RecipePage";
 import {
   RULE_CATALOG, labelForRule, lossyRule, recipeNeedsKey,
+  type RecipeFingerprint,
   type Recipe, type RecipeResult, type StageOutput, type Reconstruction,
   type RecoveryWord, type WordChoice,
 } from "./recipeTypes";
@@ -40,6 +41,7 @@ function App() {
   const [builtins, setBuiltins] = useState<Recipe[]>([]);
   const [saved, setSaved] = useState<Recipe[]>([]);
   const [activeRecipe, setActiveRecipe] = useState<Recipe | null>(null);
+  const [activeFingerprint, setActiveFingerprint] = useState<RecipeFingerprint | null>(null);
   const [stageOutputs, setStageOutputs] = useState<StageOutput[]>([]);
   const [exactOutput, setExactOutput] = useState(false);
   const [lockedChoices, setLockedChoices] = useState<WordChoice[]>([]);
@@ -83,6 +85,16 @@ function App() {
   const theme = getTheme(mode === "light" ? appearance.lightTheme : appearance.darkTheme, mode);
   const style = paletteVars(theme, appearance);
   const availableThemes = THEMES.filter(t => t.variant === mode);
+  useEffect(() => {
+    let current = true;
+    setActiveFingerprint(null);
+    if (activeRecipe) {
+      void invoke<RecipeFingerprint>("recipe_fingerprint", { recipe: activeRecipe })
+        .then(result => { if (current) setActiveFingerprint(result); })
+        .catch(() => { if (current) setActiveFingerprint(null); });
+    }
+    return () => { current = false; };
+  }, [activeRecipe]);
   const needsKey = recipeNeedsKey(activeRecipe);
   const stages = activeRecipe?.steps.filter(step => step.enabled).map(step => ({
     title: labelForRule(step.rule),
@@ -289,6 +301,14 @@ function App() {
                   <span>{activeRecipe.id.startsWith("builtin-") ? "Bundled example" : "Saved locally on this computer"}</span>
                 </div>
               ) : null}
+              {activeFingerprint && (
+                <div className="workbench-fingerprint">
+                  <span>Recipe fingerprint</span>
+                  <code title={activeFingerprint.value} data-testid="active-recipe-fingerprint">
+                    {activeFingerprint.display}
+                  </code>
+                </div>
+              )}
               <label className="input-caption" htmlFor="operation-mode">Direction</label>
               <select id="operation-mode" value={direction} onChange={e => { setDirection(e.target.value as Direction); clearResults(); }}>
                 <option value="encode">Encode plaintext</option><option value="decode">{stages.every(s => s.reversible) ? "Decode exactly" : "Decode / reconstruct English"}</option>
@@ -303,7 +323,7 @@ function App() {
               <input id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
                 onChange={e => { setPassphrase(e.target.value); clearResults(); }} />
               <p className="helper-text">{needsKey
-                ? "This recipe derives a shift or phonetic rotation from your key."
+                ? "The enabled keyed rules use this passphrase. Some rules derive parameters from the recipe configuration and key."
                 : "This recipe has no keyed rule; the passphrase is ignored."}</p>
               <button className="sidebar-run" onClick={() => void run()} disabled={!activeRecipe || busy || choosing || !source.trim() || (needsKey && !passphrase.trim())}>▶ {direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
               <div className="sidebar-note">

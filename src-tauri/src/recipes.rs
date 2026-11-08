@@ -46,6 +46,10 @@ pub enum Rule {
     Beaufort,
     Affine { a: u8, b: u8 },
     RailFence { rails: u8 },
+    // Stable parameter-derivation rules, keyed by recipe configuration and
+    // the original step position. Existing rules never change meaning.
+    DerivedCaesar,
+    DerivedRailFence,
 }
 
 impl Rule {
@@ -64,6 +68,8 @@ impl Rule {
             Self::Beaufort => "Beaufort",
             Self::Affine { .. } => "Affine",
             Self::RailFence { .. } => "Rail Fence",
+            Self::DerivedCaesar => "Passphrase-derived Caesar",
+            Self::DerivedRailFence => "Passphrase-derived Rail Fence",
         }
     }
     fn lossy(&self) -> bool {
@@ -79,6 +85,8 @@ impl Rule {
                 | Self::PositionShift { keyed: true, .. }
                 | Self::Vigenere
                 | Self::Beaufort
+                | Self::DerivedCaesar
+                | Self::DerivedRailFence
         )
     }
 }
@@ -183,7 +191,7 @@ pub struct RecipeResult {
 }
 
 pub fn builtins() -> Result<Vec<Recipe>, String> {
-    const DOCUMENTS: [&str; 11] = [
+    const DOCUMENTS: [&str; 12] = [
         include_str!("../../recipes/001.json"),
         include_str!("../../recipes/002.json"),
         include_str!("../../recipes/003.json"),
@@ -195,6 +203,7 @@ pub fn builtins() -> Result<Vec<Recipe>, String> {
         include_str!("../../recipes/009.json"),
         include_str!("../../recipes/010.json"),
         include_str!("../../recipes/011.json"),
+        include_str!("../../recipes/012.json"),
     ];
     DOCUMENTS
         .iter()
@@ -363,6 +372,9 @@ fn apply(rule: &Rule, text: &str, key: &str, undo: bool) -> Result<String, Strin
         | Rule::Beaufort
         | Rule::Affine { .. }
         | Rule::RailFence { .. } => classical::transform(rule, text, key, undo),
+        Rule::DerivedCaesar | Rule::DerivedRailFence => {
+            Err("Keyed rule must be resolved before execution.".into())
+        }
     }
 }
 
@@ -371,11 +383,19 @@ pub fn encode(recipe: &Recipe, text: &str, key: &str) -> Result<RecipeResult, St
     let mut current = text.to_owned();
     let mut stages = Vec::new();
     let mut exact = true;
-    for rule in recipe.enabled() {
-        current = apply(rule, &current, &key, false)?;
+    for (index, step) in recipe
+        .steps
+        .iter()
+        .enumerate()
+        .filter(|(_, step)| step.enabled)
+    {
+        let rule = &step.rule;
+        let derived = fingerprint::resolve(recipe, index, rule, &key)?;
+        let actual = derived.as_ref().map_or(rule, |(effective, _)| effective);
+        current = apply(actual, &current, &key, false)?;
         exact &= !rule.lossy();
         stages.push(StageOutput {
-            label: rule.name().into(),
+            label: derived.map_or_else(|| rule.name().to_owned(), |(_, label)| label),
             text: current.clone(),
             lossy: rule.lossy(),
         });
@@ -405,15 +425,27 @@ pub fn decode(
     let mut stages = Vec::new();
     let mut lost = false;
     let enabled: Vec<&Rule> = recipe.enabled().collect();
-    for rule in enabled.iter().rev() {
+    for (index, step) in recipe
+        .steps
+        .iter()
+        .enumerate()
+        .rev()
+        .filter(|(_, step)| step.enabled)
+    {
+        let rule = &step.rule;
         if rule.lossy() {
             lost = true;
             continue;
         }
         if !lost {
-            current = apply(rule, &current, &key, true)?;
+            let derived = fingerprint::resolve(recipe, index, rule, &key)?;
+            let actual = derived.as_ref().map_or(rule, |(effective, _)| effective);
+            current = apply(actual, &current, &key, true)?;
             stages.push(StageOutput {
-                label: format!("Undo {}", rule.name()),
+                label: format!(
+                    "Undo {}",
+                    derived.map_or_else(|| rule.name().to_owned(), |(_, label)| label)
+                ),
                 text: current.clone(),
                 lossy: false,
             });
@@ -479,6 +511,7 @@ pub fn decode(
 }
 
 mod classical;
+pub mod fingerprint;
 pub mod skeleton;
 pub mod store;
 
@@ -497,7 +530,7 @@ mod tests {
     #[test]
     fn all_bundled_recipes_validate_and_are_data() {
         let recipes = builtins().unwrap();
-        assert_eq!(recipes.len(), 11);
+        assert_eq!(recipes.len(), 12);
         for recipe in recipes {
             recipe.validate().unwrap();
         }
@@ -608,6 +641,8 @@ mod tests {
                 .prop_flat_map(|a| (Just(a), 0u8..=25))
                 .prop_map(|(a, b)| Rule::Affine { a, b }),
             (2u8..=16).prop_map(|rails| Rule::RailFence { rails }),
+            Just(Rule::DerivedCaesar),
+            Just(Rule::DerivedRailFence),
         ]
     }
 

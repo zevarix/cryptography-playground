@@ -27,6 +27,7 @@ The required schemaVersion is currently 1; name/description and IDs are bounded.
 - vigenere and beaufort: require the workbench passphrase (1-64 ASCII English letters); the key is not saved in JSON.
 - affine: multiplier a is one of 1,3,5,7,9,11,15,17,19,21,23,25; offset b is 0-25. Invalid values are rejected before upstream setters can panic.
 - rail_fence: rails 2-16. All ASCII characters are transposed and restored, including whitespace and punctuation.
+- derived_caesar and derived_rail_fence: no numeric parameters in JSON; their values derive from the exact rule configuration, zero-based step position and workbench passphrase (1-64 ASCII English letters). See [the fingerprint/derivation specification](recipe-fingerprints.md).
 
 ## Rule catalog
 
@@ -45,6 +46,8 @@ The required schemaVersion is currently 1; name/description and IDs are bounded.
 | Beaufort | beaufort | Yes |
 | Affine | affine | Yes |
 | Rail Fence | rail_fence | Yes |
+| Derived Caesar shift | derived_caesar | Yes (requires passphrase) |
+| Derived Rail Fence | derived_rail_fence | Yes (requires passphrase) |
 
 For reversible pipelines, decoding applies the enabled rules in reverse order and uses each inverse. These preserve supported ASCII input, including case, punctuation and whitespace.
 
@@ -63,6 +66,7 @@ For lossy pipelines, the decoder reverses the final reversible suffix and retain
 - recipes/009.json: Rail Fence with three rails.
 - recipes/010.json: Atbash.
 - recipes/011.json: Classical Layers (Vigenere, Rail Fence and Atbash).
+- recipes/012.json: Passphrase-Derived Layers (Derived Caesar + Derived Rail Fence + Atbash).
 
 These are editable examples, not special engine implementations. The examples use base 5 for the unkeyed shift. Users can change this rule and reorder compatible rules.
 

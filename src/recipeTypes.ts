@@ -11,7 +11,9 @@ export type Rule =
   | { type: "vigenere" }
   | { type: "beaufort" }
   | { type: "affine"; a: number; b: number }
-  | { type: "rail_fence"; rails: number };
+  | { type: "rail_fence"; rails: number }
+  | { type: "derived_caesar" }
+  | { type: "derived_rail_fence" };
 
 export type Step = { enabled: boolean; rule: Rule };
 export type Recipe = {
@@ -22,6 +24,12 @@ export type Recipe = {
   steps: Step[];
 };
 export type RuleKind = Rule["type"];
+export type RecipeFingerprint = {
+  algorithm: "SHA-256";
+  version: 1;
+  value: string;
+  display: string;
+};
 export type StageOutput = { label: string; text: string; lossy: boolean };
 export type WordChoice = { index: number; candidate: string };
 export type RecoveryWord = {
@@ -60,6 +68,8 @@ export const RULE_CATALOG: Array<{
   { type: "beaufort", label: "Beaufort", detail: "Reciprocal repeating-key substitution using the workbench passphrase. Powered by cifers 0.1.5.", lossy: false },
   { type: "affine", label: "Affine", detail: "Alphabet transformation (a × letter + b) mod 26. Powered by cifers 0.1.5.", lossy: false },
   { type: "rail_fence", label: "Rail Fence", detail: "Zigzag transposition of every ASCII character, including punctuation. Powered by cifers 0.1.5.", lossy: false },
+  { type: "derived_caesar", label: "Derived Caesar shift", detail: "Deterministic Caesar shift (0-25) derived from this recipe's rules, rule position, and your passphrase.", lossy: false },
+  { type: "derived_rail_fence", label: "Derived Rail Fence", detail: "Deterministic Rail Fence count (2-16) derived from this recipe's rules, rule position, and your passphrase.", lossy: false },
 ];
 
 export function labelForRule(rule: Rule): string {
@@ -81,7 +91,9 @@ export function recipeNeedsKey(recipe: Recipe | null): boolean {
     (s.rule.type === "phonetic_rotate" ||
       (s.rule.type === "position_shift" && s.rule.keyed) ||
       s.rule.type === "vigenere" ||
-      s.rule.type === "beaufort")) ?? false;
+      s.rule.type === "beaufort" ||
+      s.rule.type === "derived_caesar" ||
+      s.rule.type === "derived_rail_fence")) ?? false;
 }
 export function newUserRecipe(): Recipe {
   return {

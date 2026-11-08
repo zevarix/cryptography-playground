@@ -41,6 +41,13 @@ fn delete_saved_recipe(app: tauri::AppHandle, id: String) -> Result<(), String> 
 }
 
 #[tauri::command]
+fn recipe_fingerprint(
+    recipe: recipes::Recipe,
+) -> Result<recipes::fingerprint::RecipeFingerprint, String> {
+    recipes::fingerprint::fingerprint(&recipe)
+}
+
+#[tauri::command]
 fn evaluate_recipe(
     recipe: recipes::Recipe,
     text: String,
@@ -71,7 +78,8 @@ pub fn run() {
             list_saved_recipes,
             save_recipe,
             delete_saved_recipe,
-            evaluate_recipe
+            evaluate_recipe,
+            recipe_fingerprint
         ])
         .run(tauri::generate_context!())
         .expect("Tauri failed to start");

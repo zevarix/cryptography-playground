@@ -11,7 +11,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifacts = resolve(root, "test-artifacts");
 await mkdir(artifacts, { recursive: true });
 const recipeFixtures = await Promise.all(
-  Array.from({ length: 11 }, (_, i) => String(i + 1).padStart(3, "0")).map(async number =>
+  Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(3, "0")).map(async number =>
     JSON.parse(await readFile(resolve(root, "recipes", number + ".json"), "utf8"))
   )
 );
@@ -36,6 +36,15 @@ try {
     window.__TAURI_INTERNALS__ = {
       invoke: async (command, args) => {
         if (command === "builtin_recipes") return fixtures;
+        if (command === "recipe_fingerprint") {
+          // Fixture-only digest for UI behavior; Rust unit tests establish
+          // the true domain-separated canonical SHA-256 fingerprint.
+          const content = JSON.stringify({ schemaVersion: args.recipe.schemaVersion, steps: args.recipe.steps });
+          const bytes = new TextEncoder().encode(content);
+          const digest = await crypto.subtle.digest("SHA-256", bytes);
+          const value = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+          return { algorithm: "SHA-256", version: 1, value, display: "CP-R1-" + value.slice(0,16) };
+        }
         if (command === "list_saved_recipes") return saved;
         if (command === "save_recipe") {
           saved = [args.recipe, ...saved.filter(r => r.id !== args.recipe.id)];
@@ -52,7 +61,7 @@ try {
         const keyRequired = recipe.steps.some(s => s.enabled &&
           (s.rule.type === "phonetic_rotate" ||
             (s.rule.type === "position_shift" && s.rule.keyed) ||
-            ["vigenere", "beaufort"].includes(s.rule.type)));
+            ["vigenere", "beaufort", "derived_caesar", "derived_rail_fence"].includes(s.rule.type)));
         if (keyRequired && !["spectacular", "lemon"].includes(args.key)) throw new Error("Test bridge: incorrect key.");
         const vigenere = recipe.steps.some(s => s.enabled && s.rule.type === "vigenere");
         const railFence = recipe.steps.some(s => s.enabled && s.rule.type === "rail_fence");
@@ -105,8 +114,43 @@ try {
   assert.match(await page.locator("h1").innerText(), /Experiment: Phonetic Rotation/);
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   const pngRecipes = resolve(artifacts, "recipe-library-and-builder.png");
+  assert.equal(await page.locator(".recipe-library-entry").count(), 12);
+  await page.waitForFunction(() => document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent?.startsWith("CP-R1-"));
   await page.screenshot({ path: pngRecipes, fullPage: true, animations: "disabled" });
-  assert.equal(await page.locator(".recipe-library-entry").count(), 11);
+  const initialFingerprint = await page.locator('[data-testid="recipe-fingerprint"]').innerText();
+  assert.match(initialFingerprint, /^CP-R1-[0-9a-f]{16}$/);
+  assert.match(await page.locator('[data-testid="recipe-fingerprint"]').getAttribute("title"), /^[0-9a-f]{64}$/);
+  await page.getByRole("button", { name: /Passphrase-Derived Layers/ }).click();
+  assert.equal(await page.locator("#rule-0").inputValue(), "derived_caesar");
+  assert.equal(await page.locator("#rule-1").inputValue(), "derived_rail_fence");
+  assert.match(await page.locator(".rule-key-note").first().innerText(), /derived at runtime/);
+  await page.waitForFunction((previous) => {
+    const displayed = document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent;
+    return displayed?.startsWith("CP-R1-") && displayed !== previous;
+  }, initialFingerprint);
+  const derivedFingerprint = await page.locator('[data-testid="recipe-fingerprint"]').innerText();
+  assert.notEqual(derivedFingerprint, initialFingerprint);
+  const pngDerived = resolve(artifacts, "recipe-derived-parameters-editor.png");
+  await page.screenshot({ path: pngDerived, fullPage: true, animations: "disabled" });
+  await page.getByRole("button", { name: "Duplicate", exact: true }).click();
+  await page.waitForFunction((expected) => document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent === expected, derivedFingerprint);
+  assert.equal(await page.locator('[data-testid="recipe-fingerprint"]').innerText(), derivedFingerprint, "Metadata/ID-only copy should preserve fingerprint");
+  await page.locator("#rule-0").selectOption("caesar");
+  await page.waitForFunction((previous) =>
+    !!document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent?.startsWith("CP-R1-") &&
+    document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent !== previous,
+  derivedFingerprint);
+  assert.notEqual(await page.locator('[data-testid="recipe-fingerprint"]').innerText(), derivedFingerprint);
+  await page.getByRole("button", { name: /Passphrase-Derived Layers/ }).click();
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="active-recipe-fingerprint"]')?.textContent?.startsWith("CP-R1-"));
+  assert.equal(await page.locator('[data-testid="active-recipe-fingerprint"]').innerText(), derivedFingerprint);
+  await page.locator("#passphrase").fill("");
+  assert.equal(await page.getByRole("button", { name: /Encode/ }).isDisabled(), true);
+  await page.locator("#passphrase").fill("lemon");
+  await page.getByRole("button", { name: /Encode/ }).click();
+  assert.equal(await page.locator("#cipher-result").innerText(), "pairfixture");
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
   await page.getByRole("button", { name: /Vigenere/ }).click();
   assert.equal(await page.locator("#rule-0").inputValue(), "vigenere");
   assert.equal(await page.locator("#rule-0 optgroup[label='Classical substitution (cifers)']").count(), 1);
@@ -290,11 +334,12 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: [ "classical recipe catalog", "Vigenere passphrase requirement", "Affine configuration and saved copy", "Rail Fence parameter editing", "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: [ "classical recipe catalog", "12 bundled recipes", "recipe fingerprint visibility", "fingerprint unaffected by metadata", "fingerprint changes with rules", "passphrase-derived rule UI", "Vigenere passphrase requirement", "Affine configuration and saved copy", "Rail Fence parameter editing", "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
       { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
       { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },
       { path: pngRecipes, bytes: (await stat(pngRecipes)).size },
+      { path: pngDerived, bytes: (await stat(pngDerived)).size },
       { path: pngClassical, bytes: (await stat(pngClassical)).size },
       { path: pngExact, bytes: (await stat(pngExact)).size },
       { path: pngDecode, bytes: (await stat(pngDecode)).size },
