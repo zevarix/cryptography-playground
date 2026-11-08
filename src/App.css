@@ -462,3 +462,50 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 /* Notes for imported classical rules using the workbench passphrase. */
 .rule-key-note { color: var(--app-muted); font-size: 11px; line-height: 1.55; }
+
+/* Stable rule-configuration comparison code; it never contains a passphrase. */
+.recipe-fingerprint {
+  border: 1px solid var(--app-border);
+  background: var(--app-panel);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+  margin: 15px 0;
+}
+.recipe-fingerprint > div { flex: 1 1 240px; }
+.recipe-fingerprint strong { display: block; font-size: 12px; }
+.recipe-fingerprint p { color: var(--app-muted); font-size: 11px; line-height: 1.5; margin: 5px 0 0; }
+.recipe-fingerprint code {
+  color: var(--app-accent);
+  font: 600 12px/1.5 Consolas, "SFMono-Regular", monospace;
+  overflow-wrap: anywhere;
+}
+.recipe-fingerprint button {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  color: var(--app-text);
+  padding: 7px 10px;
+  font-size: 11px;
+}
+.recipe-fingerprint button:disabled { opacity: .5; }
+.workbench-fingerprint {
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-panel);
+  color: var(--app-muted);
+  font-size: 11px;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+}
+.workbench-fingerprint code {
+  color: var(--app-accent);
+  font: 11px/1.45 Consolas, "SFMono-Regular", monospace;
+}

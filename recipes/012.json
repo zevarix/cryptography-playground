@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-012",
+  "name": "Passphrase-Derived Layers",
+  "description": "An experimental recipe where the passphrase deterministically selects a Caesar shift and Rail Fence rail count from the recipe's fingerprint and rule positions. Same recipe and passphrase reproduce the same transformations.",
+  "steps": [
+    {
+      "enabled": true,
+      "rule": {
+        "type": "derived_caesar"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "derived_rail_fence"
+      }
+    },
+    {
+      "enabled": true,
+      "rule": {
+        "type": "atbash"
+      }
+    }
+  ]
+}

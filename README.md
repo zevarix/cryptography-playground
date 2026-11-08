@@ -51,6 +51,23 @@ The Rule Library now includes Caesar/ROT13, Vigenere, Beaufort, Affine, Atbash, 
 
 Vigenere and Beaufort use the workbench passphrase without storing it inside the recipe. All classical adapters preserve supported ASCII input on exact reverse, including case and punctuation. Rail Fence transposes all characters rather than stripping formatting. See [classical cipher adoption notes](docs/classical-cipher-adoption.md) for upstream source/license and test vectors. These historical ciphers are not secure encryption.
 
+## Recipe configuration fingerprints and derived parameters
+
+Each recipe has a reproducible \`CP-R1-...\` comparison code with a full SHA-256 fingerprint.
+The fingerprint is computed from its versioned, normalized rule steps, **not** its name,
+ID, description or passphrase. The editor updates it as rules change; the workbench shows
+the active recipe's fingerprint. This is a configuration identifier, not proof of
+authenticity or a secret key.
+
+Recipe 012 demonstrates two new reusable rules: *Derived Caesar shift* and
+*Derived Rail Fence*. These choose their numeric settings deterministically from
+the recipe configuration, rule position and the runtime passphrase. The derived
+values are visible in the transformation notebook, and existing fixed-parameter
+rules retain their previous behavior. Passphrases are never exported in recipe JSON.
+See [recipe fingerprint specification](docs/recipe-fingerprints.md) for the exact
+versioned byte format and important limitations. This is for puzzles, **not secure
+encryption**.
+
 ## Development
 
 ```sh
