@@ -7,12 +7,12 @@ This checklist separates source publication from distributing a desktop binary. 
 - [x] Describe the current 12 examples, editable recipes, speculative decoding, and fingerprints.
 - [x] Link to publicly accessible Rust Coding Standards.
 - [x] Add contributor instructions, safe bug-report guidance, and issue forms.
-- [x] Retain data provenance and add adapted-theme license notices.
+- [x] Retain data provenance and adapted-theme notices; verify CMU checksums and the 20,000-word ranking file.
 - [x] Prepare pinned-action validation and weekly dependency updates.
-- [ ] Validate this candidate and verify the first GitHub Actions run.
-- [ ] Complete the source/history exposure review and record its scope and limitations in the pull request.
+- [x] Validate the candidate and verify the first full GitHub Actions run.
+- [x] Review source and published branch history with targeted credential/private-context patterns; record the scope and limitations in the pull request.
 - [ ] Select the license for project-original code and documentation; add its text and package metadata.
-- [ ] Resolve or explicitly retain third-party notice questions before the applicable distribution.
+- [x] Document retained third-party notice questions and their binary-distribution gate.
 - [ ] Obtain the owner's public-publication decision and apply repository settings.
 
 ## CI scope and cost
