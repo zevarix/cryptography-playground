@@ -117,7 +117,9 @@ pub fn run() {
             documents::commands::doc_discard_job,
             documents::commands::doc_discard_document,
             documents::commands::doc_preview,
-            documents::commands::resolve_recipe_identifier
+            documents::commands::resolve_recipe_identifier,
+            documents::commands::doc_reconstruct,
+            documents::commands::doc_candidate_page
         ])
         .run(tauri::generate_context!())
         .expect("Tauri failed to start");

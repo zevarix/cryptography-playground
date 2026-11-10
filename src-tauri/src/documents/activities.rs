@@ -18,9 +18,18 @@ use std::{
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ActivityResult {
-    Opened { document: DocumentInfo },
-    Imported { companion: ImportedCompanion },
-    Saved { receipt: SaveReceipt },
+    Opened {
+        document: DocumentInfo,
+    },
+    Imported {
+        companion: ImportedCompanion,
+    },
+    Saved {
+        receipt: SaveReceipt,
+    },
+    Reconstructed {
+        reading: super::reconstruct::ReadingInfo,
+    },
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ActivityError {
@@ -189,7 +198,11 @@ impl AppDocuments {
                             // A verified save remains a completed effect even if a
                             // stop request arrives after its final verification.
                             if worker.control.check().is_err()
-                                && !matches!(result, ActivityResult::Saved { .. })
+                                && !matches!(
+                                    result,
+                                    ActivityResult::Saved { .. }
+                                        | ActivityResult::Reconstructed { .. }
+                                )
                             {
                                 if let ActivityResult::Opened { document } = result {
                                     let _ = controller.store().discard_document(&document.id);
@@ -259,17 +272,48 @@ impl AppDocuments {
     pub fn save(
         &self,
         job_id: String,
+        reading_id: Option<String>,
         destination: PathBuf,
         companion: Companion,
     ) -> Result<ActivityInfo, String> {
         let store = self.store().clone();
-        let result = store.job(&job_id)?.result()?;
+        let result = if let Some(id) = &reading_id {
+            super::reconstruct::current(&store, &job_id, id)?
+                .artifact
+                .clone()
+        } else {
+            store.job(&job_id)?.result()?
+        };
         self.spawn(
             "Staging, publishing and verifying new files",
             Some(result.stats.bytes.to_string()),
             move |control| {
                 Ok(ActivityResult::Saved {
-                    receipt: export::save(&store, &job_id, &destination, companion, control)?,
+                    receipt: export::save_reading(
+                        &store,
+                        &job_id,
+                        reading_id.as_deref(),
+                        &destination,
+                        companion,
+                        control,
+                    )?,
+                })
+            },
+        )
+    }
+    pub fn reconstruct(
+        &self,
+        job_id: String,
+        choices: Vec<super::reconstruct::DocChoice>,
+    ) -> Result<ActivityInfo, String> {
+        let store = self.store().clone();
+        store.job(&job_id)?.result()?;
+        self.spawn(
+            "Searching and verifying an English reading",
+            None,
+            move |control| {
+                Ok(ActivityResult::Reconstructed {
+                    reading: super::reconstruct::run(&store, &job_id, &choices, control)?,
                 })
             },
         )

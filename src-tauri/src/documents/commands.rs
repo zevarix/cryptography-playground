@@ -70,6 +70,7 @@ pub async fn doc_save(
     app: AppHandle,
     documents: State<'_, AppDocuments>,
     job_id: String,
+    reading_id: Option<String>,
     companion: Companion,
 ) -> Result<Option<ActivityInfo>, String> {
     let controller = documents.inner().clone();
@@ -100,6 +101,7 @@ pub async fn doc_save(
     path.map(|path| {
         controller.save(
             job_id,
+            reading_id,
             path.into_path()
                 .map_err(|_| "The destination is not a native filesystem path.")?,
             companion,
@@ -159,14 +161,18 @@ pub async fn doc_preview(
     documents: State<'_, AppDocuments>,
     document_id: Option<String>,
     job_id: Option<String>,
+    reading_id: Option<String>,
     stage: Option<usize>,
     offset: String,
 ) -> Result<Preview, String> {
     let store = documents.store().clone();
     let offset: u64 = offset.parse().map_err(|_| "Invalid preview byte offset.")?;
-    tauri::async_runtime::spawn_blocking(move || match (document_id, job_id) {
-        (Some(id), None) => store.preview_document(&id, offset),
-        (None, Some(id)) => store.preview_job(&id, stage, offset),
+    tauri::async_runtime::spawn_blocking(move || match (document_id, job_id, reading_id) {
+        (Some(id), None, None) => store.preview_document(&id, offset),
+        (None, Some(id), None) => store.preview_job(&id, stage, offset),
+        (None, Some(id), Some(reading)) if stage.is_none() => {
+            super::reconstruct::preview(&store, &id, &reading, offset)
+        }
         _ => Err("Select exactly one preview source.".into()),
     })
     .await
@@ -180,4 +186,31 @@ pub fn resolve_recipe_identifier(
     let mut available = recipes::builtins()?;
     available.extend(recipes::store::list(&app)?);
     recipes::lookup::lookup(&identifier, &available)
+}
+
+#[tauri::command]
+pub fn doc_reconstruct(
+    documents: State<'_, AppDocuments>,
+    job_id: String,
+    choices: Vec<super::reconstruct::DocChoice>,
+) -> Result<ActivityInfo, String> {
+    documents.reconstruct(job_id, choices)
+}
+
+#[tauri::command]
+pub async fn doc_candidate_page(
+    documents: State<'_, AppDocuments>,
+    job_id: String,
+    reading_id: String,
+    offset: String,
+) -> Result<super::reconstruct::CandidatePage, String> {
+    let store = documents.store().clone();
+    let offset = offset
+        .parse()
+        .map_err(|_| "Invalid candidate byte offset.")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        super::reconstruct::page(&store, &job_id, &reading_id, offset)
+    })
+    .await
+    .map_err(|_| "Candidate page worker failed.")?
 }

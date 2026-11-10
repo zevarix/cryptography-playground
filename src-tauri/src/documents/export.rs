@@ -295,9 +295,48 @@ pub fn save(
     )
 }
 
+pub fn save_reading(
+    store: &DocumentStore,
+    job_id: &str,
+    reading_id: Option<&str>,
+    destination: &Path,
+    companion: Companion,
+    control: &Control,
+) -> Result<SaveReceipt, SaveFailure> {
+    save_selection_with(
+        store,
+        job_id,
+        reading_id,
+        destination,
+        companion,
+        control,
+        &mut NativePublisher,
+    )
+}
+
 pub(super) fn save_with(
     store: &DocumentStore,
     job_id: &str,
+    destination: &Path,
+    companion: Companion,
+    control: &Control,
+    publisher: &mut impl Publisher,
+) -> Result<SaveReceipt, SaveFailure> {
+    save_selection_with(
+        store,
+        job_id,
+        None,
+        destination,
+        companion,
+        control,
+        publisher,
+    )
+}
+
+fn save_selection_with(
+    store: &DocumentStore,
+    job_id: &str,
+    reading_id: Option<&str>,
     destination: &Path,
     companion: Companion,
     control: &Control,
@@ -308,7 +347,15 @@ pub(super) fn save_with(
     let outcome = (|| -> Result<(), String> {
         control.check()?;
         let job = store.job(job_id)?;
-        let artifact = job.result()?;
+        let reading = reading_id
+            .map(|id| super::reconstruct::current(store, job_id, id))
+            .transpose()?;
+        // Retaining this Arc keeps a selected reading alive if a later
+        // candidate selection replaces the job's current reading during Save.
+        let artifact = reading
+            .as_ref()
+            .map(|r| r.artifact.clone())
+            .map_or_else(|| job.result(), Ok)?;
         let info = store.status(job_id)?;
         let parent = destination
             .parent()

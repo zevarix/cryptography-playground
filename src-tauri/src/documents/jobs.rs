@@ -62,12 +62,15 @@ pub(super) struct JobState {
     pub info: JobInfo,
     pub artifacts: Vec<Artifact>,
     pub result: Option<Artifact>,
+    pub reading: Option<Arc<super::reconstruct::Reading>>,
+    pub reconstructing: bool,
 }
 pub(super) struct Job {
     pub root: TempDir,
     pub source: Arc<Snapshot>,
     pub control: Control,
     pub state: Mutex<JobState>,
+    pub key: String,
 }
 impl Job {
     pub fn result(&self) -> Result<Artifact, String> {
@@ -257,6 +260,7 @@ impl DocumentStore {
             note: String::new(),
         };
         let job = Arc::new(Job {
+            key: key.clone(),
             root,
             source,
             control: Control::default(),
@@ -264,6 +268,8 @@ impl DocumentStore {
                 info: info.clone(),
                 artifacts: Vec::new(),
                 result: None,
+                reading: None,
+                reconstructing: false,
             }),
         });
         {

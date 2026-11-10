@@ -3,6 +3,7 @@ pub(crate) mod activities;
 pub(crate) mod commands;
 pub(crate) mod export;
 pub(crate) mod jobs;
+pub(crate) mod reconstruct;
 pub(crate) mod storage;
 pub(crate) mod stream;
 pub(crate) mod transform;
@@ -42,3 +43,6 @@ mod export_tests;
 
 #[cfg(test)]
 mod activity_tests;
+
+#[cfg(test)]
+mod reconstruction_tests;
