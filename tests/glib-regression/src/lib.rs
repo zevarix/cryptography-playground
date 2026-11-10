@@ -1,4 +1,8 @@
 #[cfg(test)]
+#[allow(
+    clippy::double_ended_iterator_last,
+    reason = "The advisory covers this iterator's last() implementation."
+)]
 mod tests {
     use glib::prelude::ToVariant;
 
