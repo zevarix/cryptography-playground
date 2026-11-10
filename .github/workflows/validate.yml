@@ -95,7 +95,7 @@ jobs:
       - name: Install native Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb x11-utils dbus-x11
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libxdo-dev libssl-dev librsvg2-dev patchelf xvfb x11-utils dbus-x11
       - name: Select Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -126,6 +126,8 @@ jobs:
         run: cargo clippy --manifest-path tests/glib-regression/Cargo.toml --locked --all-targets -- -D warnings
       - name: Install frontend dependencies
         run: npm ci
+      - name: Verify native GLib dependency graph
+        run: python3 ci/check_glib.py
       - name: Test Rust engine and adapters on Linux
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Check Rust with Clippy on Linux

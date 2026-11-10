@@ -21,3 +21,10 @@ updates:
       day: monday
       time: "08:00"
       timezone: America/Phoenix
+  - package-ecosystem: cargo
+    directory: /tests/glib-regression
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Phoenix

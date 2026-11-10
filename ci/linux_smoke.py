@@ -11,6 +11,8 @@ binary = Path("src-tauri/target/debug/cryptography-playground").resolve()
 with tempfile.TemporaryDirectory(prefix="playground-linux-smoke-") as temporary:
     root = Path(temporary)
     environment = os.environ.copy()
+    environment["GDK_BACKEND"] = "x11"
+    environment["LIBGL_ALWAYS_SOFTWARE"] = "1"
     for key, directory in [
         ("XDG_CONFIG_HOME", "config"),
         ("XDG_DATA_HOME", "data"),

@@ -28,8 +28,8 @@ mod tests {
         let mut iter = value.array_iter_str().unwrap();
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next_back(), None);
-        assert_eq!(iter.nth(0), None);
-        assert_eq!(iter.nth_back(0), None);
+        assert_eq!(iter.nth(1), None);
+        assert_eq!(iter.nth_back(1), None);
         assert_eq!(iter.last(), None);
     }
 }

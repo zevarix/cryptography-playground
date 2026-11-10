@@ -9,6 +9,11 @@ affects optimized string-variant iteration in the published package.
 The upstream correction is
 [`b5a4071e439bef2b5eea76c3aa25e5ae84839e34`](https://github.com/gtk-rs/gtk-rs-core/commit/b5a4071e439bef2b5eea76c3aa25e5ae84839e34).
 
+Only `src/variant_iter.rs` differs from the published package: the output pointer
+is mutable and passed as `&mut p`, matching the upstream fix. This gives the C
+function an exclusive mutable output argument while the borrowed string remains
+tied to its immutable, type-checked parent variant.
+
 The application uses a Cargo path patch so this source is selected throughout the
 GTK dependency graph. The package version remains 0.18.5; it does not claim to be
 an upstream release. Retain [LICENSE](glib/LICENSE), [COPYRIGHT](glib/COPYRIGHT),
