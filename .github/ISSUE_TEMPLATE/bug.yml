@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible application problem using synthetic data.
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities or sensitive reports, follow SECURITY.md. Do not include real secrets or private experiment text."
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and architecture
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include a minimal recipe and synthetic input when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

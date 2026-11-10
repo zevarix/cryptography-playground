@@ -14,13 +14,13 @@ Cryptography Playground is a standalone desktop application. This repository is 
 
 ## Rust coding guidance
 
-Source: `zevarix/rust-coding-standards` (internal development reference).
+Source: [Rust Coding Standards](https://github.com/zevarix/rust-coding-standards), with published guidance at https://rcs.zevarix.com/.
 Standards reference: latest `main` at the time of coding/review.
 Scope: new and meaningfully changed Rust code.
 Project-specific exceptions: none currently.
 Reviewers record the actual RCS revision consulted in review evidence.
 
-This is a contributor workflow convention, not a runtime, build, governance, or release dependency. Before any public publication, replace inaccessible contributor instructions with self-contained public guidance if the standards are still private.
+This is a contributor workflow convention, not a runtime, build, governance, or release dependency. The standards are a public contributor reference; keep this project's requirements and exceptions authoritative.
 
 ## Local development acceptance
 
