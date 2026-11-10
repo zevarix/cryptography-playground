@@ -5,6 +5,8 @@ import {
   readAppearance, type Appearance, type AppearanceMode, type FontChoice,
 } from "./theme";
 import RecipePage from "./RecipePage";
+import DocumentPanel from "./DocumentPanel";
+import type { FilePanelActions, FilePanelState } from "./documentTypes";
 import classicalCipherLicense from "../licenses/ciphers-0.1.0-MIT.txt?raw";
 import {
   RULE_CATALOG, labelForRule, lossyRule, recipeNeedsKey,
@@ -51,6 +53,9 @@ function App() {
   const operationId = useRef(0);
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [inputMode, setInputMode] = useState<"text" | "file">("text");
+  const [fileState, setFileState] = useState<FilePanelState>({ busy: false, canRun: false, hasDocument: false });
+  const fileActions = useRef<FilePanelActions | null>(null);
   const [inspected, setInspected] = useState<"intermediate" | "ciphertext">("intermediate");
 
   useEffect(() => {
@@ -124,7 +129,8 @@ function App() {
     setDetail(""); setMessage("");
   }
   async function run() {
-    if (busy || choosing || !activeRecipe) return;
+    if (inputMode === "file") { fileActions.current?.run();return; }
+    if (busy || choosing || fileState.busy || !activeRecipe) return;
     const operation = ++operationId.current;
     setBusy(true); setChoosing(false); setMessage("");
     try {
@@ -272,7 +278,7 @@ function App() {
               Unsaved draft
             </span>
           )}
-          <button className="top-run" onClick={() => void run()} disabled={!activeRecipe || !source.trim() || (needsKey && !passphrase.trim()) || busy || choosing}>▶ {busy ? "Running" : "Run"}</button>
+          <button className="top-run" onClick={() => void run()} disabled={inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || !source.trim() || (needsKey && !passphrase.trim()) || busy || choosing || fileState.busy}>▶ {busy ? "Running" : fileState.busy ? "Working" : "Run"}</button>
           <button onClick={() => setPage("appearance")} aria-label="Appearance settings" title="Appearance settings">⚙</button>
         </div>
       </header>
@@ -285,8 +291,7 @@ function App() {
           <div className="spacer" />
           <button title="About" aria-label="About" className={page === "about" ? "active" : ""} onClick={() => setPage("about")}>ⓘ</button>
         </nav>
-        {page === "workbench" ? (
-          <main className="workbench">
+          <main className={"workbench" + (inputMode === "file" ? " document-workbench" : "")} hidden={page !== "workbench"}>
             <aside className="source-sidebar">
               <div className="sidebar-title"><h2>Experiment</h2>
                 <button className="recipe-change" onClick={() => setPage("recipes")}>{activeRecipe?.name ?? "Choose a recipe"} ↗</button>
@@ -314,31 +319,35 @@ function App() {
               <select id="operation-mode" value={direction} onChange={e => { setDirection(e.target.value as Direction); clearResults(); }}>
                 <option value="encode">Encode plaintext</option><option value="decode">{stages.every(s => s.reversible) ? "Decode exactly" : "Decode / reconstruct English"}</option>
               </select>
+              <div className="input-mode" role="group" aria-label="Input source"><button type="button" aria-pressed={inputMode === "text"} onClick={() => setInputMode("text")}>Text</button><button type="button" aria-pressed={inputMode === "file"} onClick={() => setInputMode("file")}>File</button></div>
+              <div hidden={inputMode !== "text"}>
               <label htmlFor="source-input" className="input-caption">{direction === "encode" ? "Plaintext" : "Ciphertext"}</label>
               <textarea id="source-input" rows={8} spellCheck={false} value={source} onChange={e => {
                 if (direction === "encode") setPlaintext(e.target.value);
                 else setCiphertext(e.target.value);
                 clearResults();
               }} placeholder="Enter text" />
+              </div>
+              <div className="file-source-actions" hidden={inputMode !== "file"}><button type="button" disabled={busy || choosing || fileState.busy} onClick={() => fileActions.current?.open()}>Open file</button><p className="helper-text">Drop a file into the app or choose a UTF-8 .txt or .md file.</p></div>
               <label className="input-caption" htmlFor="passphrase">Passphrase {needsKey ? "(required)" : "(unused)"}</label>
               <input id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
                 onChange={e => { setPassphrase(e.target.value); clearResults(); }} />
               <p className="helper-text">{needsKey
                 ? "The enabled keyed rules use this passphrase. Some rules derive parameters from the recipe configuration and key."
                 : "This recipe has no keyed rule; the passphrase is ignored."}</p>
-              <button className="sidebar-run" onClick={() => void run()} disabled={!activeRecipe || busy || choosing || !source.trim() || (needsKey && !passphrase.trim())}>▶ {direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
+              <button className="sidebar-run" onClick={() => void run()} disabled={inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || busy || choosing || fileState.busy || !source.trim() || (needsKey && !passphrase.trim())}>▶ {inputMode === "file" ? "Run file recipe" : direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
               <div className="sidebar-note">
                 <strong>Experimental only</strong>
                 <p>{stages.some(s => !s.reversible)
                   ? "This recipe discards information. English reconstruction is speculative."
-                  : "This recipe is reversible on supported ASCII input."}
+                  : activeRecipe?.schemaVersion === 2 ? "This recipe is reversible on UTF-8 text." : "This recipe is reversible on supported ASCII input."}
                   Never use experimental recipes for protecting sensitive data.</p>
               </div>
             </aside>
             <section className="notebook">
               <div className="notebook-tabs"><span className="active">◈ {activeRecipe?.name ?? "Choose a recipe"}</span>
                 <button onClick={() => setPage("recipes")}>Edit rules</button></div>
-              <article className="notebook-page">
+              <article className="notebook-page" hidden={inputMode !== "text"}>
                 <div className="punch-holes" aria-hidden="true">◦<span>◦</span><span>◦</span></div>
                 <h1>Experiment: {activeRecipe?.name ?? "Loading"}</h1>
                 <div className="meta-line"><span>{activeRecipe?.id ?? "loading"}</span>
@@ -438,8 +447,12 @@ function App() {
                   </button>
                 </div>
               </article>
+              <DocumentPanel visible={inputMode === "file"} actionsRef={fileActions} recipe={activeRecipe} fingerprint={activeFingerprint}
+                builtins={builtins} unsavedRecipe={activeIsUnsaved} passphrase={passphrase} direction={direction}
+                onRecipe={activateRecipe} onSaveRecipe={saveRecipe} onNotice={setMessage}
+                onOpenMode={() => { setInputMode("file");setPage("workbench"); }} onStateChange={setFileState} />
             </section>
-            <aside className="inspector">
+            <aside className="inspector" hidden={inputMode === "file"}>
               <h2>Inspector</h2>
               {isReversibleRecipe && direction === "decode" ? (
                 <div className="inspector-exact-status">{isExactDecode ? "Exact decoded result" : "Reversible recipe"}</div>
@@ -499,17 +512,17 @@ function App() {
                 </div>
               )}
                 <div className="inspector-block"><h3>Reversibility</h3>
-                  <p>{exactOutput ? "All enabled rules reverse exactly on supported ASCII input."
+                  <p>{exactOutput ? (activeRecipe?.schemaVersion === 2 ? "All enabled rules reverse exactly on UTF-8 text." : "All enabled rules reverse exactly on supported ASCII input.")
                     : "This recipe contains a lossy rule. Any English suggestion is speculative, even when its encoding matches."}</p>
                 </div>
             </aside>
           </main>
-        ) : page === "recipes" ? (
+        {page === "recipes" ? (
           <RecipePage builtins={builtins} saved={saved} active={activeRecipe}
-            busy={busy || choosing} onActivate={activateRecipe}
+            busy={busy || choosing || fileState.busy} onActivate={activateRecipe}
             onSave={saveRecipe} onDelete={deleteRecipe} onNotice={setMessage}
             onWorkbench={() => setPage("workbench")} />
-        ) : (
+        ) : page !== "workbench" ? (
           <main className="settings-layout">
             <aside className="settings-nav">
               <h2>Settings</h2>
@@ -618,9 +631,9 @@ function App() {
               )}
             </article>
           </main>
-        )}
+        ) : null}
       </div>
-      <footer className="statusbar"><span>◈ Cryptography Playground</span><span role="status">{page === "workbench" && message ? message : (theme.name + " / " + mode)}</span><span>{busy ? "Working…" : "Ready"}</span></footer>
+      <footer className="statusbar"><span>◈ Cryptography Playground</span><span role="status">{page === "workbench" && message ? message : (theme.name + " / " + mode)}</span><span>{busy || fileState.busy ? "Working…" : "Ready"}</span></footer>
     </div>
   );
 }

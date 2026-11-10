@@ -177,6 +177,12 @@ impl DocumentStore {
             .map_err(|_| "Document job state is unavailable.")?
             .info
             .clone();
+        if info.state == "running"
+            && let Some((phase, total)) = job.control.progress()
+        {
+            info.phase = format!("{} · {}", info.phase, phase);
+            info.total_bytes = total.map_or_else(String::new, |value| value.to_string());
+        }
         info.processed_bytes = job.control.bytes.load(Ordering::Relaxed).to_string();
         Ok(info)
     }

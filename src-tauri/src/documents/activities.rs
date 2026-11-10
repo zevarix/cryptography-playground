@@ -101,13 +101,21 @@ impl AppDocuments {
         &self.inner.store
     }
     fn id(&self, prefix: &str) -> Result<String, String> {
-        let next = self
-            .inner
-            .next
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                value.checked_add(1)
-            })
-            .map_err(|_| "Document operation identifier overflow.")?;
+        let mut next = self.inner.next.load(Ordering::Relaxed);
+        loop {
+            let following = next
+                .checked_add(1)
+                .ok_or("Document operation identifier overflow.")?;
+            match self.inner.next.compare_exchange_weak(
+                next,
+                following,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(current) => next = current,
+            }
+        }
         Ok(format!("{prefix}-{next}"))
     }
     fn activity(&self, id: &str) -> Result<Arc<Activity>, String> {
@@ -126,6 +134,12 @@ impl AppDocuments {
             .lock()
             .map_err(|_| "Document activity state is unavailable.")?
             .clone();
+        if info.state == "running"
+            && let Some((phase, total)) = activity.control.progress()
+        {
+            info.phase = phase;
+            info.total_bytes = total.map(|value| value.to_string());
+        }
         info.processed_bytes = activity.control.bytes.load(Ordering::Relaxed).to_string();
         Ok(info)
     }
@@ -153,10 +167,8 @@ impl AppDocuments {
                 .lock()
                 .map_err(|_| "Document activity state is unavailable.")?;
             activity.control.cancel();
-            if !keep_document {
-                if let Some(ActivityResult::Opened { document }) = &info.result {
-                    self.store().discard_document(&document.id)?;
-                }
+            if !keep_document && let Some(ActivityResult::Opened { document }) = &info.result {
+                self.store().discard_document(&document.id)?;
             }
         }
         Ok(())
@@ -255,15 +267,14 @@ impl AppDocuments {
         self.spawn("Reading recipe companion", None, move |control| {
             control.check()?;
             let companion = export::read_companion(&path)?;
-            if let ImportedCompanion::Recipe { recipe } = &companion {
-                if !expected.trim().is_empty()
-                    && crate::recipes::lookup::lookup(&expected, std::slice::from_ref(recipe))?
-                        .is_none()
-                {
-                    return Err("Imported JSON does not match the supplied fingerprint."
-                        .to_owned()
-                        .into());
-                }
+            if let ImportedCompanion::Recipe { recipe } = &companion
+                && !expected.trim().is_empty()
+                && crate::recipes::lookup::lookup(&expected, std::slice::from_ref(recipe))?
+                    .is_none()
+            {
+                return Err("Imported JSON does not match the supplied fingerprint."
+                    .to_owned()
+                    .into());
             }
             control.check()?;
             Ok(ActivityResult::Imported { companion })

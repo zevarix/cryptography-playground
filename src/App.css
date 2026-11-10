@@ -510,3 +510,37 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   color: var(--app-accent);
   font: 11px/1.45 Consolas, "SFMono-Regular", monospace;
 }
+/* Keep inactive notebooks mounted without exposing their controls to focus. */
+[hidden] { display:none !important; }
+.input-mode { display:flex; gap:6px; margin:16px 0; }
+.input-mode button { flex:1; padding:8px; border:1px solid var(--app-border); border-radius:5px; background:var(--app-surface); color:var(--app-text); }
+.input-mode button[aria-pressed="true"] { border-color:var(--app-accent); color:var(--app-accent); }
+.document-workbench { grid-template-columns:265px minmax(0,1fr); }
+.document-panel { min-width:0; }
+.document-panel label { display:block; font-size:12px; margin:10px 0 5px; }
+.document-panel select, .document-panel textarea { max-width:100%; width:100%; box-sizing:border-box; background:var(--app-bg); color:var(--app-text); border:1px solid var(--app-border); border-radius:5px; padding:8px; font:inherit; }
+.document-panel textarea { resize:vertical; min-height:3.5rem; }
+.document-panel button, .file-source-actions button { background:var(--app-surface); color:var(--app-text); border:1px solid var(--app-border); border-radius:5px; padding:8px 11px; font:inherit; cursor:pointer; }
+.document-panel button:disabled { opacity:.5; cursor:default; }
+.document-panel :focus-visible, .file-source-actions :focus-visible { outline:2px solid var(--app-accent); outline-offset:2px; }
+.document-actions { display:flex; flex-wrap:wrap; gap:7px; margin:10px 0; }
+.document-fingerprint { display:block; overflow-wrap:anywhere; font-size:12px; margin:8px 0; }
+.document-legacy-note, .document-stale { border-inline-start:3px solid var(--app-accent); padding:5px 12px; background:var(--app-bg); }
+.document-legacy-note button { margin:3px 7px 5px 0; }
+.document-progress { display:grid; gap:8px; padding:12px 0; }
+.document-progress progress { width:100%; accent-color:var(--app-accent); }
+.document-progress button { justify-self:start; }
+.document-notice { overflow-wrap:anywhere; }
+.document-preview { min-width:0; margin:22px 0; }
+.document-preview pre { box-sizing:border-box; max-height:22rem; min-height:6rem; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:var(--app-bg); border:1px solid var(--app-border); padding:12px; font:12px/1.6 Consolas,"SFMono-Regular",monospace; }
+.document-paging { display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; font-size:11px; color:var(--app-muted); }
+.document-companions { border:1px solid var(--app-border); padding:8px 12px; margin:20px 0 8px; }
+.document-companions legend { font-size:12px; }
+.document-companions label { display:flex; gap:8px; align-items:center; }
+.document-save { margin:12px 0; }
+.document-word { border-bottom:1px solid var(--app-border); padding:12px 0; font-size:12px; }
+.document-word button[aria-pressed="true"] { border-color:var(--app-accent); color:var(--app-accent); }
+.document-confirm { max-width:min(30rem,90vw); color:var(--app-text); background:var(--app-surface); border:1px solid var(--app-border); border-radius:8px; padding:22px; }
+.document-confirm::backdrop { background:rgb(0 0 0 / .45); }
+@media(max-width:1100px) { .document-workbench { grid-template-columns:240px minmax(0,1fr); } }
+@media(max-width:760px) { .document-workbench { display:flex; flex-direction:column; } .document-panel { padding:24px 16px; } }

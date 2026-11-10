@@ -229,6 +229,38 @@ fn rail_documents_match_legacy_for_all_supported_counts() {
 }
 
 #[test]
+fn manual_document_recipes_roundtrip_unicode_and_keep_bom_as_text() {
+    let mut recipe = crate::recipes::builtins().unwrap().remove(2);
+    recipe.schema_version = 2;
+    recipe.steps = vec![
+        Step {
+            enabled: true,
+            rule: Rule::Caesar { shift: 3 },
+        },
+        Step {
+            enabled: true,
+            rule: Rule::RailFence { rails: 3 },
+        },
+    ];
+    let text = "\u{feff}Café e\u{301} 世界 🙂\r\n";
+    let encoded = crate::recipes::encode(&recipe, text, "").unwrap();
+    assert_eq!(
+        crate::recipes::decode(&recipe, &encoded.output, "", &[])
+            .unwrap()
+            .output,
+        text
+    );
+    assert!(
+        crate::recipes::encode(&recipe, "", "")
+            .unwrap()
+            .output
+            .is_empty()
+    );
+    recipe.schema_version = 1;
+    assert!(crate::recipes::encode(&recipe, text, "").is_err());
+}
+
+#[test]
 fn invalid_utf8_and_cancel_are_failures_without_clobber() {
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("invalid");

@@ -22,6 +22,7 @@ pub struct DocumentInfo {
     pub bytes: String,
     pub digest: String,
     pub bom: bool,
+    pub legacy_compatible: bool,
 }
 
 pub(super) struct Snapshot {
@@ -83,6 +84,7 @@ pub(super) fn capture(
     if !before.is_file() {
         return Err("Choose a regular text file.".into());
     }
+    control.begin("Reading UTF-8 source", Some(before.len()))?;
     let identity = Handle::from_file(
         file.try_clone()
             .map_err(|e| io_error("Cannot retain source handle", e))?,
@@ -108,12 +110,14 @@ pub(super) fn capture(
     });
     let mut output = ArtifactWriter::create(&payload)?;
     let mut bom = false;
+    let mut ascii = true;
     let mut first = true;
     let mut counter = 0_u16;
     while let Some(scalar) = input.next()? {
         if first && scalar == '\u{feff}' {
             bom = true;
         } else {
+            ascii &= scalar.is_ascii();
             output.push(scalar)?;
         }
         first = false;
@@ -144,6 +148,11 @@ pub(super) fn capture(
         bytes: bytes.to_string(),
         digest,
         bom,
+        legacy_compatible: ascii
+            && stats.bytes > 0
+            && stats.bytes
+                <= u64::try_from(crate::recipes::MAX_INPUT_BYTES)
+                    .map_err(|_| "Legacy size overflow.")?,
     };
     Ok(Snapshot {
         _root: root,

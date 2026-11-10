@@ -191,7 +191,7 @@ pub struct RecipeResult {
 }
 
 pub fn builtins() -> Result<Vec<Recipe>, String> {
-    const DOCUMENTS: [&str; 12] = [
+    const DOCUMENTS: [&str; 14] = [
         include_str!("../../recipes/001.json"),
         include_str!("../../recipes/002.json"),
         include_str!("../../recipes/003.json"),
@@ -204,6 +204,8 @@ pub fn builtins() -> Result<Vec<Recipe>, String> {
         include_str!("../../recipes/010.json"),
         include_str!("../../recipes/011.json"),
         include_str!("../../recipes/012.json"),
+        include_str!("../../recipes/013.json"),
+        include_str!("../../recipes/014.json"),
     ];
     DOCUMENTS
         .iter()
@@ -383,6 +385,9 @@ fn apply(rule: &Rule, text: &str, key: &str, undo: bool) -> Result<String, Strin
 }
 
 pub fn encode(recipe: &Recipe, text: &str, key: &str) -> Result<RecipeResult, String> {
+    if recipe.schema_version == 2 {
+        return crate::documents::manual::evaluate(recipe, text, key, false, &[]);
+    }
     let key = validate_inputs(recipe, text, key)?;
     let mut current = text.to_owned();
     let mut stages = Vec::new();
@@ -424,6 +429,9 @@ pub fn decode(
     key: &str,
     choices: &[WordChoice],
 ) -> Result<RecipeResult, String> {
+    if recipe.schema_version == 2 {
+        return crate::documents::manual::evaluate(recipe, text, key, true, choices);
+    }
     let key = validate_inputs(recipe, text, key)?;
     let mut current = text.to_owned();
     let mut stages = Vec::new();
@@ -535,7 +543,7 @@ mod tests {
     #[test]
     fn all_bundled_recipes_validate_and_are_data() {
         let recipes = builtins().unwrap();
-        assert_eq!(recipes.len(), 12);
+        assert_eq!(recipes.len(), 14);
         for recipe in recipes {
             recipe.validate().unwrap();
         }

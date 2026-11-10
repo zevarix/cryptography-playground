@@ -1,0 +1,20 @@
+import type { Recipe, RecipeFingerprint } from "./recipeTypes";
+
+export type Direction = "encode" | "decode";
+export type Companion = "json" | "fingerprint" | "none";
+export type DocumentInfo = { id: string; name: string; encoding: "UTF-8"; bytes: string; digest: string; bom: boolean; legacyCompatible: boolean };
+export type Preview = { text: string; offset: string; nextOffset: string; bytes: string; eof: boolean };
+export type JobInfo = { id: string; documentId: string; state: "running" | "complete" | "failed" | "cancelled"; phase: string; processedBytes: string; totalBytes: string | null; recipe: Recipe; fingerprint: RecipeFingerprint; direction: Direction; exact: boolean; stages: Array<{ label: string; bytes: string; lossy: boolean }>; note: string };
+export type PublishedArtifact = { name: string; bytes: string; digest: string };
+export type SaveReceipt = { artifacts: PublishedArtifact[] };
+export type OperationError = { message: string; published: PublishedArtifact[]; unverified: string[] };
+export type ImportedCompanion = { kind: "recipe"; recipe: Recipe } | { kind: "fingerprint"; identifier: string };
+export type ReadingInfo = { id: string; jobId: string; words: string; note: string };
+export type DocChoice = { wordId: string; candidate: string };
+export type ReadingWord = { wordId: string; transformed: string; suggested: string; alternatives: string[]; compatibleCount: number };
+export type CandidatePage = { words: ReadingWord[]; nextOffset: string; eof: boolean };
+export type ActivityResult = { kind: "opened"; document: DocumentInfo } | { kind: "imported"; companion: ImportedCompanion } | { kind: "saved"; receipt: SaveReceipt } | { kind: "reconstructed"; reading: ReadingInfo };
+export type ActivityInfo = { id: string; state: "running" | "complete" | "failed" | "cancelled"; phase: string; processedBytes: string; totalBytes: string | null; result: ActivityResult | null; error: OperationError | null };
+export type DropNotice = { token: string; name: string };
+export type FilePanelState = { busy: boolean; canRun: boolean; hasDocument: boolean };
+export type FilePanelActions = { open: () => void; run: () => void };

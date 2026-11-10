@@ -131,12 +131,27 @@ fn legacy_documents_keep_the_original_input_contract() {
     for input in [String::new(), "café".into(), "a".repeat(16385)] {
         fs::write(&source, input).unwrap();
         let document = store.capture(&source, &Control::default()).unwrap();
+        assert!(!document.legacy_compatible);
         assert!(
             store
                 .start(&document.id, old.clone(), String::new(), Direction::Encode)
                 .is_err()
         );
     }
+    fs::write(&source, "\u{feff}".to_owned() + &"a".repeat(16384)).unwrap();
+    let compatible = store.capture(&source, &Control::default()).unwrap();
+    assert!(compatible.legacy_compatible);
+    assert_eq!(
+        finish(
+            &store,
+            &store
+                .start(&compatible.id, old, String::new(), Direction::Encode)
+                .unwrap()
+                .id
+        )
+        .state,
+        "complete"
+    );
 }
 
 #[test]

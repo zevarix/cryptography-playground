@@ -24,10 +24,10 @@ function RuleOptions() {
       "phonetic_rotate", "remove_vowels", "collapse_doubles", "word_mirror",
       "pair_swap", "rotate_vowels", "position_shift",
     ] },
-    { name: "Classical substitution (cifers)", types: [
+    { name: "Classical substitution (ciphers)", types: [
       "caesar", "atbash", "vigenere", "beaufort", "affine",
     ] },
-    { name: "Classical transposition (cifers)", types: ["rail_fence"] },
+    { name: "Classical transposition (ciphers)", types: ["rail_fence"] },
     { name: "Passphrase-derived parameters", types: ["derived_caesar", "derived_rail_fence"] },
   ];
   return <>{groups.map(group => (

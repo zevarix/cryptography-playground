@@ -35,6 +35,14 @@ pub fn transform_known(
     scalars: Option<u64>,
 ) -> Result<ArtifactStats, String> {
     control.check()?;
+    control.begin(
+        "Transforming text",
+        Some(
+            std::fs::metadata(source)
+                .map_err(|e| io_error("Cannot inspect transformation input", e))?
+                .len(),
+        ),
+    )?;
     let mut input = ScalarReader::open(source)?;
     let mut output = ArtifactWriter::create(destination)?;
     let parent = destination.parent().ok_or("Missing artifact directory.")?;
@@ -43,10 +51,12 @@ pub fn transform_known(
             &mut input,
             source,
             &mut output,
-            *rails,
-            undo,
-            scalars,
-            parent,
+            RailOptions {
+                rails: *rails,
+                undo,
+                known: scalars,
+                parent,
+            },
             control,
         )?,
         Rule::WordMirror => mirror(&mut input, &mut output, parent, control)?,
@@ -283,6 +293,7 @@ fn mirror(
             }
             continue;
         }
+        let was_spooled = spool.is_some();
         if let Some(mut file) = spool.take() {
             file.write_all(&word)
                 .map_err(|e| io_error("Cannot finish word spool", e))?;
@@ -291,6 +302,7 @@ fn mirror(
                 .metadata()
                 .map_err(|e| io_error("Cannot inspect word spool", e))?
                 .len();
+            control.begin("Reversing long word", None)?;
             while remaining > 0 {
                 control.check()?;
                 let length = usize::try_from(
@@ -311,6 +323,9 @@ fn mirror(
             for byte in word.iter().rev() {
                 output.push(char::from(*byte))?;
             }
+        }
+        if was_spooled {
+            control.begin("Scanning words", None)?;
         }
         word.clear();
         if let Some(scalar) = scalar {
@@ -333,16 +348,25 @@ fn rail_index(at: u64, rails: u8) -> usize {
     .expect("rail index is at most 15")
 }
 
+struct RailOptions<'a> {
+    rails: u8,
+    undo: bool,
+    known: Option<u64>,
+    parent: &'a Path,
+}
 fn rail(
     input: &mut ScalarReader<File>,
     source: &Path,
     output: &mut ArtifactWriter,
-    rails: u8,
-    undo: bool,
-    known: Option<u64>,
-    parent: &Path,
+    options: RailOptions<'_>,
     control: &Control,
 ) -> Result<(), String> {
+    let RailOptions {
+        rails,
+        undo,
+        known,
+        parent,
+    } = options;
     let mut files: Vec<NamedTempFile> = (0..rails)
         .map(|_| NamedTempFile::new_in(parent).map_err(|e| io_error("Cannot create rail spool", e)))
         .collect::<Result<_, _>>()?;
@@ -356,6 +380,7 @@ fn rail(
         total = if let Some(total) = known {
             total
         } else {
+            control.begin("Counting rail characters", None)?;
             let mut total = 0;
             while input.next()?.is_some() {
                 check(input, control, &mut counter)?;
@@ -363,6 +388,7 @@ fn rail(
             }
             total
         };
+        control.begin("Distributing rail characters", None)?;
         *input = ScalarReader::open(source)?;
         let cycle = u64::from(rails - 1) * 2;
         let mut counts = vec![total / cycle; usize::from(rails)];
@@ -396,6 +422,7 @@ fn rail(
             total = add(total, 1)?;
         }
     }
+    control.begin("Flushing rail buffers", None)?;
     for writer in &mut writers {
         writer
             .flush()
@@ -410,6 +437,7 @@ fn rail(
             Ok(ScalarReader::new(file.as_file_mut()))
         })
         .collect::<Result<Vec<_>, String>>()?;
+    control.begin("Assembling rail result", None)?;
     if undo {
         for at in 0..total {
             if at % 4096 == 0 {

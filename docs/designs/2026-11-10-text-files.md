@@ -1,6 +1,6 @@
 # Text files, recipe exports, and fingerprint lookup
 
-Status: proposed design for implementation approval. The expanded approach is agreed; the engineering choices below are proposed defaults.
+Status: approved for implementation on 2026-11-10. User-facing behavior and compatibility are documented in [Text files](../text-files.md).
 
 Source reviewed: `zevarix/cryptography-playground` at `10bb3aa416af75f63c9ac97e882c98fc93c47ced`.
 
@@ -23,7 +23,7 @@ This is a contained application project, rather than only adding file dialogs: t
 
 Keep Rust/Tauri 2/React and the existing notebook. Native dialogs use the maintained Tauri dialog API from Rust; Rust owns file handles, processing, and publication. No private infrastructure becomes an application dependency. Exact new dependency versions and their license review belong in the implementation plan.
 
-## Proposed compatibility contract
+## Compatibility contract
 
 Introduce document-text semantics as recipe schema version 2. Version 1 retains its existing interpretation, validation, canonical serialization, `CRYPT-R1` fingerprints, parameter derivation, and golden results. No existing saved recipe is rewritten automatically.
 

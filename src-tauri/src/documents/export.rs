@@ -124,6 +124,7 @@ fn hash(file: &mut File, control: &Control) -> Result<(u64, String), String> {
             u64::try_from(read).map_err(|_| "Export size overflow.")?,
         )?;
         hash.update(&buffer[..read]);
+        control.observe(bytes)?;
     }
     Ok((bytes, digest_hex(&hash.finalize())))
 }
@@ -138,6 +139,7 @@ fn finish_stage(
     file.as_file()
         .sync_all()
         .map_err(|e| io_error("Cannot flush staged export", e))?;
+    control.begin("Verifying staged bytes", Some(expected_bytes))?;
     let (bytes, digest) = hash(file.as_file_mut(), control)?;
     if bytes != expected_bytes || digest != expected_digest {
         return Err("Staged export failed byte verification.".into());
@@ -157,6 +159,7 @@ fn stage_result(
     destination: &Path,
     control: &Control,
 ) -> Result<Staged, String> {
+    control.begin("Staging result", Some(artifact.stats.bytes))?;
     let mut source =
         File::open(&artifact.path).map_err(|e| io_error("Cannot read completed result", e))?;
     let mut stage = NamedTempFile::new_in(root).map_err(|e| io_error("Cannot stage result", e))?;
@@ -278,6 +281,7 @@ fn verify_published(
     })
 }
 
+#[cfg(test)]
 pub fn save(
     store: &DocumentStore,
     job_id: &str,
@@ -314,6 +318,7 @@ pub fn save_reading(
     )
 }
 
+#[cfg(test)]
 pub(super) fn save_with(
     store: &DocumentStore,
     job_id: &str,
@@ -428,9 +433,13 @@ fn save_selection_with(
                     .map_err(|e| io_error("Cannot retain staged file identity", e))?,
             )
             .map_err(|e| io_error("Cannot inspect staged file identity", e))?;
+            control.begin("Publishing new file", None)?;
             let publication = publisher.publish(staged.file, &staged.destination);
             // Reconcile even when an acknowledgment failed: no error means
             // neither 'absent' nor permission to overwrite a possibly published file.
+            // Even a cancelled publication must be reconciled below; begin must
+            // not short-circuit after a file may already exist.
+            let _ = control.begin("Verifying saved file", Some(staged.bytes));
             let receipt = verify_published(
                 &staged.destination,
                 &identity,
@@ -466,6 +475,8 @@ fn save_selection_with(
                 }
             }
         }
+        // Cancellation after verified publication cannot undo saved files.
+        let _ = control.begin("Finalizing saved files", None);
         #[cfg(unix)]
         File::open(&parent)
             .and_then(|file| file.sync_all())

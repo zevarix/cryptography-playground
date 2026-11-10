@@ -179,6 +179,7 @@ pub fn run(
         words: 0,
         job_id: job_id.into(),
     };
+    control.begin("Searching for an English reading", Some(source.stats.bytes))?;
     if phonetic {
         document::search(
             &source.path,
@@ -215,6 +216,7 @@ pub fn run(
         label: "Speculative English reading".into(),
         lossy: true,
     };
+    control.begin("Re-encoding complete reading", None)?;
     verify(&job, &info.recipe, &artifact, root.path(), control)?;
     control.check()?;
     let info = ReadingInfo { id, job_id: job_id.into(), words: words.to_string(), note: "Speculative dictionary reading, verified by re-encoding the complete document. This does not establish original wording, spelling or formatting.".into() };

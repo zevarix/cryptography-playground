@@ -152,10 +152,10 @@ pub(crate) fn search(
                     possible.push((word.as_str(), phones.as_slice()));
                 }
             }
-            if order.len() == 128 {
-                if let Some(old) = order.pop_front() {
-                    cache.remove(&old);
-                }
+            if order.len() == 128
+                && let Some(old) = order.pop_front()
+            {
+                cache.remove(&old);
             }
             order.push_back(token.clone());
             cache.insert(token.clone(), possible);
@@ -234,6 +234,7 @@ pub(crate) fn search(
     if pins.keys().any(|index| *index >= count) {
         return Err("A selected word is outside the document.".into());
     }
+    control.begin("Tracing complete English reading", None)?;
     let mut reversed = NamedTempFile::new_in(root)
         .map_err(|e| io_error("Cannot create reconstruction traceback", e))?;
     let mut at = beams.first().and_then(|b| b.node);

@@ -247,6 +247,7 @@ fn cancellation_after_publication_reports_an_unverified_file() {
             path: &Path,
         ) -> Result<fs::File, String> {
             let file = export::Publisher::publish(&mut export::NativePublisher, stage, path)?;
+            assert_eq!(self.0.progress().unwrap().0, "Publishing new file");
             self.0.cancel();
             Ok(file)
         }

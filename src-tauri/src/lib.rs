@@ -78,18 +78,17 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
-                if let Some(documents) = window
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
+                && let Some(documents) = window
                     .app_handle()
                     .try_state::<documents::activities::AppDocuments>()
-                {
-                    match documents.register_drop(paths.clone()) {
-                        Ok(notice) => {
-                            let _ = window.emit("document-drop", notice);
-                        }
-                        Err(error) => {
-                            let _ = window.emit("document-drop-error", error);
-                        }
+            {
+                match documents.register_drop(paths.clone()) {
+                    Ok(notice) => {
+                        let _ = window.emit("document-drop", notice);
+                    }
+                    Err(error) => {
+                        let _ = window.emit("document-drop-error", error);
                     }
                 }
             }
