@@ -1,0 +1,83 @@
+name: Validate Cryptography Playground
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Test CI applicability
+        run: python -m unittest discover -s ci -p "test_*.py"
+      - name: Classify changed inputs
+        id: scope
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD: ${{ github.sha }}
+        run: python ci/scope.py
+      - name: Select Node
+        if: steps.scope.outputs.application == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Select stable Rust and check components
+        if: steps.scope.outputs.application == 'true'
+        id: rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default stable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (rustc --version).Split(" ")[1]
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Cache Rust dependencies and build outputs
+        if: steps.scope.outputs.application == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src-tauri/target
+          key: ${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-
+      - name: Install frontend dependencies
+        if: steps.scope.outputs.application == 'true'
+        run: npm ci
+      - name: Build TypeScript frontend
+        if: steps.scope.outputs.application == 'true'
+        run: npm run build
+      - name: Check Rust formatting
+        if: steps.scope.outputs.application == 'true'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - name: Test Rust engine and adapters
+        if: steps.scope.outputs.application == 'true'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Check Rust with Clippy
+        if: steps.scope.outputs.application == 'true'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Test isolated frontend behavior
+        if: steps.scope.outputs.application == 'true'
+        run: |
+          $env:CHROME_EXECUTABLE = Join-Path $env:ProgramFiles "Google/Chrome/Application/chrome.exe"
+          if (-not (Test-Path -LiteralPath $env:CHROME_EXECUTABLE)) {
+            throw "The runner's Google Chrome executable was not found."
+          }
+          npm run test:gui

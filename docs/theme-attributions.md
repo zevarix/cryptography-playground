@@ -13,6 +13,6 @@ Cryptography Playground uses independently maintained developer color palettes a
 
 The project-original Notebook Paper and Notebook Ink themes are not third-party presets.
 
-These are palette mappings adapted for this application. They do not represent the complete upstream token systems or every official variant. Before public distribution, re-check upstream license requirements and retain appropriate license notices. The repository currently remains private, with no project-wide publication license selected.
+These are palette mappings adapted for this application. They do not represent the complete upstream token systems or every official variant. Retained notices and the upstream Gruvbox declaration are in [theme-license-notices.md](theme-license-notices.md). The application license remains an independent owner decision.
 
 Appearance mode, theme, accent, background, foreground, and font are saved locally in the app's WebView storage. No remote theme or telemetry service is contacted.

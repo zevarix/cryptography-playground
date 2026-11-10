@@ -5,6 +5,7 @@
 The rule engine imports exactly **cifers = "=0.1.5"** from crates.io, rather than reimplementing each classical algorithm. The adapter is in src-tauri/src/recipes/classical.rs; the rest of the application operates on stable, versioned JSON Rule values, independent of crate structs.
 
 - Package: https://crates.io/crates/cifers/0.1.5
+- Publisher's source repository: https://github.com/PhantomSoap/cifers (located during public-readiness review, November 10, 2026; not linked from the published package metadata).
 - API and reference source: https://docs.rs/cifers/0.1.5/cifers/
 - Version reviewed: 0.1.5
 - Cargo package license metadata: MIT
