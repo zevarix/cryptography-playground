@@ -32,3 +32,5 @@ dist-ssr
 # Python CI tooling
 __pycache__/
 *.py[cod]
+
+/tests/glib-regression/target/

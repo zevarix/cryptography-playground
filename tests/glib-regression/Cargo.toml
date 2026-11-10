@@ -1,0 +1,11 @@
+[package]
+name = "playground-glib-regression"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[dependencies]
+glib = { path = "../../src-tauri/vendor/glib" }
+
+[workspace]

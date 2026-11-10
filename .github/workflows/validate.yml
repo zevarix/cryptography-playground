@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   application:
+    outputs:
+      application: ${{ steps.scope.outputs.application }}
     runs-on: windows-2025
     steps:
       - name: Check out source
@@ -67,7 +69,7 @@ jobs:
         run: npm run build
       - name: Check Rust formatting
         if: steps.scope.outputs.application == 'true'
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --package cryptography-playground -- --check
       - name: Test Rust engine and adapters
         if: steps.scope.outputs.application == 'true'
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
@@ -82,3 +84,55 @@ jobs:
             throw "The runner's Google Chrome executable was not found."
           }
           npm run test:gui
+
+  linux:
+    needs: application
+    if: needs.application.outputs.application == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install native Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libxdo-dev libssl-dev librsvg2-dev patchelf xvfb x11-utils dbus-x11
+      - name: Select Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Select stable Rust
+        id: rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
+          rustup default stable
+          echo "version=$(rustc --version | cut -d ' ' -f 2)" >> "$GITHUB_OUTPUT"
+      - name: Cache Rust dependencies and build outputs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            src-tauri/target
+            tests/glib-regression/target
+          key: ${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('src-tauri/Cargo.lock', 'tests/glib-regression/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-
+      - name: Check GLib regression formatting
+        run: cargo fmt --manifest-path tests/glib-regression/Cargo.toml -- --check
+      - name: Test optimized GLib string iteration
+        run: cargo test --manifest-path tests/glib-regression/Cargo.toml --release --locked
+      - name: Check GLib regression with Clippy
+        run: cargo clippy --manifest-path tests/glib-regression/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Verify native GLib dependency graph
+        run: python3 ci/check_glib.py
+      - name: Test Rust engine and adapters on Linux
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Check Rust with Clippy on Linux
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Build native Linux application
+        run: npm run tauri build -- --debug --no-bundle --no-sign -- --locked
+      - name: Smoke-test native Linux window
+        run: dbus-run-session -- xvfb-run -a python3 ci/linux_smoke.py
