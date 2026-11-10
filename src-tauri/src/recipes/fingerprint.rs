@@ -103,7 +103,7 @@ fn parameter(
 
 /// Produce a regular classical rule with a derived value and an inspection label.
 /// Existing Caesar / Rail Fence rules are not modified by this operation.
-pub(super) fn resolve(
+pub(crate) fn resolve(
     recipe: &Recipe,
     index: usize,
     rule: &Rule,

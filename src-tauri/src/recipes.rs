@@ -53,7 +53,7 @@ pub enum Rule {
 }
 
 impl Rule {
-    fn name(&self) -> &'static str {
+    pub(crate) fn name(&self) -> &'static str {
         match self {
             Self::PhoneticRotate => "Phonetic rotation",
             Self::RemoveVowels => "Remove vowels",
@@ -72,7 +72,7 @@ impl Rule {
             Self::DerivedRailFence => "Passphrase-derived Rail Fence",
         }
     }
-    fn lossy(&self) -> bool {
+    pub(crate) fn lossy(&self) -> bool {
         matches!(
             self,
             Self::PhoneticRotate | Self::RemoveVowels | Self::CollapseDoubles
@@ -216,11 +216,15 @@ pub fn builtins() -> Result<Vec<Recipe>, String> {
         .collect()
 }
 
-fn validate_inputs(recipe: &Recipe, text: &str, key: &str) -> Result<String, String> {
+pub(crate) fn validate_inputs(recipe: &Recipe, text: &str, key: &str) -> Result<String, String> {
     recipe.validate()?;
     if text.is_empty() || text.len() > MAX_INPUT_BYTES || !text.is_ascii() {
         return Err("Message must be nonempty ASCII text up to 16 KiB.".into());
     }
+    normalize_key(recipe, key)
+}
+
+pub(crate) fn normalize_key(recipe: &Recipe, key: &str) -> Result<String, String> {
     let key = key.trim().to_ascii_lowercase();
     if recipe.requires_key()
         && (key.is_empty() || key.len() > 64 || !key.bytes().all(|b| b.is_ascii_lowercase()))

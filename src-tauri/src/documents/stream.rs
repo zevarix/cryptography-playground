@@ -30,6 +30,9 @@ pub struct ScalarReader<R: Read> {
     pub bytes: u64,
 }
 impl<R: Read> ScalarReader<R> {
+    pub fn into_inner(self) -> R {
+        self.input.into_inner()
+    }
     pub fn new(input: R) -> Self {
         Self {
             input: BufReader::with_capacity(BUFFER, input),

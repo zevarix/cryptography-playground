@@ -1,4 +1,6 @@
 //! Rust-owned UTF-8 document processing; IPC carries only bounded previews.
+pub(crate) mod jobs;
+pub(crate) mod storage;
 pub(crate) mod stream;
 pub(crate) mod transform;
 
@@ -28,3 +30,6 @@ impl Control {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod lifecycle_tests;
