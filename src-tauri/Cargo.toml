@@ -26,6 +26,7 @@ ciphers = "=0.1.0"
 sha2 = "0.11.1"
 tempfile = "3.27.0"
 same-file = "1.0.6"
+tauri-plugin-dialog = "2.8.4"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

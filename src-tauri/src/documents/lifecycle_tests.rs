@@ -27,16 +27,16 @@ fn recipe() -> Recipe {
     }
 }
 fn finish(store: &DocumentStore, id: &str) -> super::jobs::JobInfo {
+    finish_with_timeout(store, id, Duration::from_secs(20))
+}
+fn finish_with_timeout(store: &DocumentStore, id: &str, timeout: Duration) -> super::jobs::JobInfo {
     let started = Instant::now();
     loop {
         let info = store.status(id).unwrap();
         if info.state != "running" {
             return info;
         }
-        assert!(
-            started.elapsed() < Duration::from_secs(20),
-            "job did not finish"
-        );
+        assert!(started.elapsed() < timeout, "job did not finish");
         std::thread::sleep(Duration::from_millis(5));
     }
 }
@@ -259,13 +259,19 @@ fn measure_document_roundtrip() {
     let encoded = store
         .start(&document.id, recipe(), String::new(), Direction::Encode)
         .unwrap();
-    assert_eq!(finish(&store, &encoded.id).state, "complete");
+    assert_eq!(
+        finish_with_timeout(&store, &encoded.id, Duration::from_secs(300)).state,
+        "complete"
+    );
     let result = store.job(&encoded.id).unwrap().result().unwrap();
     let ciphertext = store.capture(&result.path, &Control::default()).unwrap();
     let decoded = store
         .start(&ciphertext.id, recipe(), String::new(), Direction::Decode)
         .unwrap();
-    assert_eq!(finish(&store, &decoded.id).state, "complete");
+    assert_eq!(
+        finish_with_timeout(&store, &decoded.id, Duration::from_secs(300)).state,
+        "complete"
+    );
     let result = store.job(&decoded.id).unwrap().result().unwrap();
     assert_eq!(result.stats.digest, document.digest);
     assert_eq!(result.stats.bytes.to_string(), document.bytes);

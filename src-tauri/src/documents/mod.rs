@@ -1,4 +1,7 @@
 //! Rust-owned UTF-8 document processing; IPC carries only bounded previews.
+pub(crate) mod activities;
+pub(crate) mod commands;
+pub(crate) mod export;
 pub(crate) mod jobs;
 pub(crate) mod storage;
 pub(crate) mod stream;
@@ -33,3 +36,9 @@ mod tests;
 
 #[cfg(test)]
 mod lifecycle_tests;
+
+#[cfg(test)]
+mod export_tests;
+
+#[cfg(test)]
+mod activity_tests;

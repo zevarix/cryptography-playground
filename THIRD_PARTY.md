@@ -18,6 +18,8 @@ Cargo.lock and package-lock.json pin resolved Rust and JavaScript packages, whic
 
 The classical adapter uses **ciphers 0.1.0** under MIT, Copyright (c) 2019 Stephen Radley. Its complete [license notice](licenses/ciphers-0.1.0-MIT.txt) is retained from the published package and displayed in the app's About page. The notice is embedded in the compiled frontend and native application. [The adapter documentation](docs/classical-cipher-adoption.md) records package provenance and formatting compatibility. The previous cifers dependency has been removed; [issue #7](https://github.com/zevarix/cryptography-playground/issues/7) records that notice-gap resolution.
 
+Document I/O uses [tauri-plugin-dialog 2.8.4](https://crates.io/crates/tauri-plugin-dialog/2.8.4) (Apache-2.0 OR MIT), [tempfile 3.27.0](https://crates.io/crates/tempfile/3.27.0) (MIT OR Apache-2.0), and [same-file 1.0.6](https://crates.io/crates/same-file/1.0.6) (Unlicense OR MIT). Their published packages retain their license files. Native file dialogs and file identity checks do not require a network service.
+
 Before distributing installers or executables, assemble notices for the exact resolved runtime dependencies and include the bundled-data and palette notices in the distribution materials. A successful source build does not establish that binary-distribution review.
 
 Remaining binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md).

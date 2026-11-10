@@ -25,7 +25,7 @@ pub struct DocumentInfo {
 }
 
 pub(super) struct Snapshot {
-    pub root: TempDir,
+    pub _root: TempDir,
     pub source: PathBuf,
     pub canonical_source: PathBuf,
     pub payload: PathBuf,
@@ -146,7 +146,7 @@ pub(super) fn capture(
         bom,
     };
     Ok(Snapshot {
-        root,
+        _root: root,
         source: source.to_owned(),
         canonical_source,
         payload,
