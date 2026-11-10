@@ -102,8 +102,8 @@ impl Recipe {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.schema_version != 1 {
-            return Err("Unsupported recipe schema version (expected 1).".into());
+        if !matches!(self.schema_version, 1 | 2) {
+            return Err("Unsupported recipe schema version (expected 1 or 2).".into());
         }
         if self.id.is_empty()
             || self.id.len() > 64
@@ -512,6 +512,7 @@ pub fn decode(
 
 mod classical;
 pub mod fingerprint;
+pub mod lookup;
 pub mod skeleton;
 pub mod store;
 

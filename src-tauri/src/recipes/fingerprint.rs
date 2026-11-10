@@ -27,7 +27,11 @@ fn digest(recipe: &Recipe) -> Result<[u8; 32], String> {
     })
     .map_err(|error| format!("Cannot canonicalize recipe: {error}"))?;
     let mut hash = Sha256::new();
-    hash.update(FINGERPRINT_DOMAIN);
+    hash.update(if recipe.schema_version == 2 {
+        b"cryptoplay:recipe-configuration:v2\0".as_slice()
+    } else {
+        FINGERPRINT_DOMAIN
+    });
     hash.update(canonical);
     Ok(hash.finalize().into())
 }
@@ -57,8 +61,8 @@ pub fn fingerprint(recipe: &Recipe) -> Result<RecipeFingerprint, String> {
     let value = lowercase_hex(&digest(recipe)?);
     Ok(RecipeFingerprint {
         algorithm: "SHA-256",
-        version: 1,
-        display: format!("CRYPT-R1-{}", &value[..16]),
+        version: recipe.schema_version as u8,
+        display: format!("CRYPT-R{}-{}", recipe.schema_version, &value[..16]),
         value,
     })
 }
@@ -78,7 +82,11 @@ fn parameter(
     }
     let digest = digest(recipe)?;
     let mut hash = Sha256::new();
-    hash.update(DERIVATION_DOMAIN);
+    hash.update(if recipe.schema_version == 2 {
+        b"cryptoplay:rule-parameter:v2\0".as_slice()
+    } else {
+        DERIVATION_DOMAIN
+    });
     hash.update(digest);
     hash.update(
         u32::try_from(index)
@@ -124,6 +132,24 @@ pub(super) fn resolve(
 mod tests {
     use super::*;
     use crate::recipes::{Step, decode, encode};
+
+    #[test]
+    fn document_recipe_has_a_separate_fingerprint_domain() {
+        let mut recipe = sample();
+        recipe.schema_version = 2;
+        recipe.steps = vec![Step {
+            enabled: true,
+            rule: Rule::Caesar { shift: 3 },
+        }];
+        let value = fingerprint(&recipe).expect("document schema is supported");
+        assert_eq!(value.version, 2);
+        assert_eq!(value.display, "CRYPT-R2-0a5edbfce2cdc5e3");
+        assert_eq!(
+            value.value,
+            "0a5edbfce2cdc5e32091b6f8eaa7b59670f6cccab82d5b5e3e88630a7a0c0611"
+        );
+        assert_ne!(value.value, fingerprint(&sample()).unwrap().value);
+    }
 
     fn sample() -> Recipe {
         Recipe {

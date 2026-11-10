@@ -17,7 +17,7 @@ export type Rule =
 
 export type Step = { enabled: boolean; rule: Rule };
 export type Recipe = {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   name: string;
   description: string;
@@ -26,7 +26,7 @@ export type Recipe = {
 export type RuleKind = Rule["type"];
 export type RecipeFingerprint = {
   algorithm: "SHA-256";
-  version: 1;
+  version: 1 | 2;
   value: string;
   display: string;
 };
