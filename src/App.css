@@ -94,6 +94,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .advanced { border-top:1px solid var(--app-border); padding:20px 2px 0; }
 .advanced summary { cursor:pointer; color:var(--app-muted); }
 .advanced p { font-size:12px; line-height:1.6; max-width:620px; }
+.license-notice { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; line-height:1.6; }
 .reset-appearance { border:1px solid var(--app-border); background:var(--app-panel); color:var(--app-text);
   border-radius:7px; padding:10px 12px; margin-top:10px; }
 .helper-text { font-size:11px; line-height:1.6; color:var(--app-muted); }

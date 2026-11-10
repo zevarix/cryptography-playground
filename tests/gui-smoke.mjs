@@ -315,6 +315,17 @@ try {
   await page.getByRole("button", { name: "Reset appearance to defaults" }).click();
   assert.equal(await page.locator("#theme-choice").inputValue(), "notebook-light");
 
+  await page.getByRole("button", { name: "About", exact: true }).click();
+  const licenseSummary = page.locator(".cipher-license summary");
+  await licenseSummary.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await page.locator(".cipher-license").getAttribute("open"), "");
+  const expectedLicense = await readFile(resolve(root, "licenses/ciphers-0.1.0-MIT.txt"), "utf8");
+  assert.equal(await page.locator(".license-notice").textContent(), expectedLicense);
+  assert.match(expectedLicense, /Copyright \(c\) 2019 Stephen Radley/);
+  const pngLicense = resolve(artifacts, "notebook-classical-license.png");
+  await page.screenshot({ path: pngLicense, fullPage: true, animations: "disabled" });
+
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
   const smallPage = await mobile.newPage();
   await smallPage.goto("http://127.0.0.1:15423/", { waitUntil: "networkidle" });
@@ -331,11 +342,23 @@ try {
   assert.equal(await darkButton.getAttribute("aria-pressed"), "true");
   const pngMobile = resolve(artifacts, "notebook-appearance-mobile.png");
   await smallPage.screenshot({ path: pngMobile, fullPage: true, animations: "disabled" });
+  await smallPage.getByRole("button", { name: "About", exact: true }).click();
+  await smallPage.locator(".cipher-license summary").click();
+  assert.equal(await smallPage.locator(".license-notice").textContent(), expectedLicense);
+  const licenseDims = await smallPage.evaluate(() => ({
+    page: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
+  }));
+  assert.ok(licenseDims.page <= licenseDims.viewport + 1, "License notice overflow: " + JSON.stringify(licenseDims));
+  const pngMobileLicense = resolve(artifacts, "notebook-classical-license-mobile.png");
+  await smallPage.screenshot({ path: pngMobileLicense, fullPage: true, animations: "disabled" });
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: [ "classical recipe catalog", "12 bundled recipes", "recipe fingerprint visibility", "fingerprint unaffected by metadata", "fingerprint changes with rules", "passphrase-derived rule UI", "Vigenere passphrase requirement", "Affine configuration and saved copy", "Rail Fence parameter editing", "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: [ "complete embedded MIT notice", "keyboard license disclosure", "mobile license layout", "classical recipe catalog", "12 bundled recipes", "recipe fingerprint visibility", "fingerprint unaffected by metadata", "fingerprint changes with rules", "passphrase-derived rule UI", "Vigenere passphrase requirement", "Affine configuration and saved copy", "Rail Fence parameter editing", "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
+      { path: pngLicense, bytes: (await stat(pngLicense)).size },
+      { path: pngMobileLicense, bytes: (await stat(pngMobileLicense)).size },
       { path: pngDesktop, bytes: (await stat(pngDesktop)).size },
       { path: pngWorkbench, bytes: (await stat(pngWorkbench)).size },
       { path: pngRecipes, bytes: (await stat(pngRecipes)).size },

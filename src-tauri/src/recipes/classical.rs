@@ -1,11 +1,9 @@
-//! Small, bounded adapters to the published cifers classical-cipher crate.
-//! The recipe engine validates the schema, parameters, ASCII input and
-//! passphrase before calling APIs that may panic on invalid affine values.
+//! Adapters to the ciphers crate with the recipe engine's ASCII contract.
+//! Substitutions preserve case and nonletters around the upstream letters-only
+//! API. Rail Fence transposes every byte, including spaces and punctuation.
 //!
-//! All supported adapters are reversible on validated ASCII input. Rail Fence
-//! intentionally transposes every character, including spaces and punctuation,
-//! rather than dropping them as some historical demonstrations do.
-use cifers::{Affine, Beaufort, Caeser, Cipher, Railfence, Vigenere};
+//! Validate parameters before calling upstream constructors that may panic.
+use ciphers::{Affine, Atbash, Beaufort, Caesar, Cipher, RailFence, Vigenere};
 
 use super::Rule;
 
@@ -15,65 +13,72 @@ pub(super) fn transform(
     passphrase: &str,
     undo: bool,
 ) -> Result<String, String> {
-    let transformed = match rule {
-        Rule::Caesar { shift } if *shift <= 25 => {
-            let cipher = Caeser::new().set_shift(i32::from(*shift));
-            if undo {
-                cipher.decipher(text)
-            } else {
-                cipher.encipher(text)
-            }
-        }
-        Rule::Atbash => {
-            let cipher = Affine::atbash();
-            if undo {
-                cipher.decipher(text)
-            } else {
-                cipher.encipher(text)
-            }
-        }
+    if !text.is_ascii() {
+        return Err("Classical-cipher input must be ASCII.".into());
+    }
+    match rule {
+        Rule::Caesar { shift } if *shift <= 25 => substitute(&Caesar::new(*shift), text, undo),
+        Rule::Atbash => substitute(&Atbash::new(), text, undo),
         Rule::Vigenere | Rule::Beaufort
             if !passphrase.is_empty()
                 && passphrase.len() <= 64
                 && passphrase.bytes().all(|b| b.is_ascii_lowercase()) =>
         {
             if matches!(rule, Rule::Vigenere) {
-                let cipher = Vigenere::new().set_code(passphrase.to_owned());
-                if undo {
-                    cipher.decipher(text)
-                } else {
-                    cipher.encipher(text)
-                }
+                substitute(&Vigenere::new(passphrase), text, undo)
             } else {
-                let cipher = Beaufort::new().set_code(passphrase.to_owned());
-                if undo {
-                    cipher.decipher(text)
-                } else {
-                    cipher.encipher(text)
-                }
+                substitute(&Beaufort::new(passphrase), text, undo)
             }
         }
         Rule::Affine { a, b } if *a >= 1 && *a <= 25 && a % 2 == 1 && a % 13 != 0 && *b <= 25 => {
-            // The upstream setters assert on invalid values; guards above
-            // match Recipe::validate's allowed affine parameter domain.
-            let cipher = Affine::new().set_a(i32::from(*a)).set_b(i32::from(*b));
-            if undo {
-                cipher.decipher(text)
-            } else {
-                cipher.encipher(text)
-            }
+            substitute(&Affine::new(i32::from(*a), i32::from(*b)), text, undo)
         }
         Rule::RailFence { rails } if (2..=16).contains(rails) => {
-            let cipher = Railfence::new().set_key(*rails);
-            if undo {
-                cipher.decipher(text)
-            } else {
-                cipher.encipher(text)
-            }
+            run_cipher(&RailFence::new(usize::from(*rails)), text, undo)
         }
-        _ => return Err("Unsupported or invalid classical-cipher rule parameters.".into()),
-    };
-    Ok(transformed)
+        _ => Err("Unsupported or invalid classical-cipher rule parameters.".into()),
+    }
+}
+
+fn run_cipher(cipher: &impl Cipher, text: &str, undo: bool) -> Result<String, String> {
+    if undo {
+        cipher.decipher(text)
+    } else {
+        cipher.encipher(text)
+    }
+    .map_err(|error| format!("Classical cipher rejected its input: {error:?}"))
+}
+
+fn substitute(cipher: &impl Cipher, text: &str, undo: bool) -> Result<String, String> {
+    // Only letters advance the repeating key; punctuation keeps its position.
+    let letters: String = text
+        .bytes()
+        .filter(u8::is_ascii_alphabetic)
+        .map(|byte| char::from(byte.to_ascii_uppercase()))
+        .collect();
+    if letters.is_empty() {
+        return Ok(text.to_owned());
+    }
+    let mapped = run_cipher(cipher, &letters, undo)?;
+    if mapped.len() != letters.len() || !mapped.bytes().all(|byte| byte.is_ascii_uppercase()) {
+        return Err("Classical cipher returned an invalid substitution.".into());
+    }
+    let mut mapped = mapped.bytes();
+    let mut output = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        let letter = if byte.is_ascii_alphabetic() {
+            let next = mapped.next().expect("substitution length was checked");
+            if byte.is_ascii_lowercase() {
+                next.to_ascii_lowercase()
+            } else {
+                next
+            }
+        } else {
+            byte
+        };
+        output.push(char::from(letter));
+    }
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -140,5 +145,49 @@ mod tests {
         assert!(transform(&Rule::RailFence { rails: 17 }, "abc", "", false).is_err());
         assert!(transform(&Rule::Vigenere, "abc", "", false).is_err());
         assert!(transform(&Rule::Beaufort, "abc", "with spaces", false).is_err());
+    }
+
+    #[test]
+    fn substitutions_preserve_ascii_formatting_and_key_position() {
+        let ascii = String::from_utf8((0..=127).collect()).unwrap();
+        let shifted = transform(&Rule::Caesar { shift: 1 }, &ascii, "", false).unwrap();
+        assert_eq!(
+            transform(&Rule::Vigenere, &ascii, "b", false).unwrap(),
+            shifted
+        );
+        for (input, output) in ascii.bytes().zip(shifted.bytes()) {
+            if !input.is_ascii_alphabetic() {
+                assert_eq!(output, input);
+            }
+        }
+        for rule in [Rule::Atbash, Rule::Beaufort, Rule::Affine { a: 5, b: 8 }] {
+            let ciphertext = transform(&rule, &ascii, "key", false).unwrap();
+            assert_eq!(transform(&rule, &ciphertext, "key", true).unwrap(), ascii);
+            assert_eq!(
+                transform(&rule, "123!\t\n", "key", false).unwrap(),
+                "123!\t\n"
+            );
+        }
+    }
+
+    #[test]
+    fn rail_fence_preserves_short_inputs_and_every_ascii_byte() {
+        let ascii = String::from_utf8((0..=127).collect()).unwrap();
+        for rails in 2..=16 {
+            for sample in ["", "a", "A!", "A1 !b\n", ascii.as_str()] {
+                let rule = Rule::RailFence { rails };
+                let ciphertext = transform(&rule, sample, "", false).unwrap();
+                assert_eq!(
+                    transform(&rule, &ciphertext, "", true).unwrap(),
+                    sample,
+                    "rails={rails}, bytes={}",
+                    sample.len()
+                );
+            }
+        }
+        assert_eq!(
+            transform(&Rule::RailFence { rails: 3 }, "A1 !b\n", "", false).unwrap(),
+            "Ab1!\n "
+        );
     }
 }

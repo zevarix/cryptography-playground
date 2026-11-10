@@ -392,10 +392,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "cifers"
-version = "0.1.6"
+name = "ciphers"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6566f0111846111df720548e3fa0003349e432d8eb8daef9ee378f88a77d1393"
+checksum = "1b001d2f53009135648d4f38656955fbbd0992144bee2c82c7f6c49786ec7f4e"
 
 [[package]]
 name = "combine"
@@ -534,7 +534,7 @@ dependencies = [
 name = "cryptography-playground"
 version = "0.1.0"
 dependencies = [
- "cifers",
+ "ciphers",
  "proptest",
  "serde",
  "serde_json",

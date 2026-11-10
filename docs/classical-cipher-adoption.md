@@ -1,47 +1,49 @@
-# Public classical-cipher adapter review
+# Classical-cipher adapter
 
-## Dependency and scope
+The recipe engine uses **ciphers = "=0.1.0"** from crates.io through `src-tauri/src/recipes/classical.rs`. Recipe rule IDs and saved JSON are independent of the library's types.
 
-The rule engine imports exactly **cifers = "=0.1.5"** from crates.io, rather than reimplementing each classical algorithm. The adapter is in src-tauri/src/recipes/classical.rs; the rest of the application operates on stable, versioned JSON Rule values, independent of crate structs.
+## Dependency and notices
 
-- Package: https://crates.io/crates/cifers/0.1.5
-- Publisher's source repository: https://github.com/PhantomSoap/cifers (located during public-readiness review, November 10, 2026; not linked from the published package metadata).
-- API and reference source: https://docs.rs/cifers/0.1.5/cifers/
-- Version reviewed: 0.1.5
-- Cargo package license metadata: MIT
-- The upstream README additionally says "MIT / Apache-2.0" while its package metadata says MIT; the inspected package contains no LICENSE file. Resolve the license notices and attribution before distributing binaries; [issue #7](https://github.com/zevarix/cryptography-playground/issues/7) tracks this question.
+- Package: https://crates.io/crates/ciphers/0.1.0
+- Source: https://github.com/sradley/ciphers
+- API: https://docs.rs/ciphers/0.1.0/ciphers/
+- License: MIT, Copyright (c) 2019 Stephen Radley.
+- [Retained license](../licenses/ciphers-0.1.0-MIT.txt), copied byte-for-byte from the published package's `LICENSE` file.
+- Package SHA-256: `1b001d2f53009135648d4f38656955fbbd0992144bee2c82c7f6c49786ec7f4e`.
+- License-file SHA-256: `45a93980856752724f1b64314e3902539d5d8953ccaef7ca5cd523c33e2c11a0`.
 
-No app runtime downloads or online cipher service are required.
+The full notice is imported as text into the About page, so it is included in the compiled frontend and native app, including unbundled local builds. Retain it when distributing or modifying the app.
+
+This replaces cifers, whose 0.1.5 and 0.1.6 packages declare MIT but omit a standalone license notice and have conflicting README metadata. `ciphers` provides all six required algorithms, includes its MIT notice, and has no dependencies. [Issue #7](https://github.com/zevarix/cryptography-playground/issues/7) records the dependency decision and compatibility evidence.
 
 ## Rule mapping
 
-| Recipe rule type | cifers implementation | Parameters | Decoding |
+| Recipe rule | Implementation | Parameters | Decoding |
 | --- | --- | --- | --- |
-| caesar | Caeser (upstream spelling) | shift: 0..25 | Shift backward |
-| atbash | Affine::atbash() | None | Its own inverse |
-| vigenere | Vigenere | Workbench passphrase | Decrypt using passphrase |
-| beaufort | Beaufort | Workbench passphrase | Its own inverse |
-| affine | Affine | a in {1,3,5,7,9,11,15,17,19,21,23,25}, b: 0..25 | Modular inverse |
-| rail_fence | Railfence | rails: 2..16 | Reverse zigzag transposition |
+| `caesar` | `Caesar` | shift 0–25 | Shift backward |
+| `atbash` | `Atbash` | None | Its own inverse |
+| `vigenere` | `Vigenere` | Workbench passphrase | Decrypt using passphrase |
+| `beaufort` | `Beaufort` | Workbench passphrase | Its own inverse |
+| `affine` | `Affine` | a in {1,3,5,7,9,11,15,17,19,21,23,25}; b 0–25 | Modular inverse |
+| `rail_fence` | `RailFence` | rails 2–16 | Reverse zigzag transposition |
 
-Vigenere and Beaufort use the **same workbench passphrase** already used by other keyed rules. They do not embed that key in portable recipe JSON. The passphrase is normalized to lowercase ASCII letters and bounded to 64 characters by engine validation.
+The upstream substitution APIs accept letters and return uppercase. The adapter extracts ASCII letters, applies the cipher, and restores their original case and the untouched nonletters. Only letters advance a repeating key. Rail Fence receives the full ASCII message and transposes every byte, including spaces, punctuation, and newlines.
 
-All rules are **reversible on supported ASCII input**. The upstream implementations operate on ASCII Latin letters; the existing application explicitly rejects non-ASCII source data and limits message size to 16 KiB. Rail Fence in particular transposes every input character, including spaces and punctuation, so it is exact and composable. Historical examples often discard formatting; this rule intentionally does not.
+Vigenere and Beaufort use the workbench passphrase, normalized to lowercase ASCII letters and limited to 1–64 letters. The passphrase is not saved in recipe JSON. The engine accepts nonempty ASCII messages up to 16 KiB. Parameter guards run before upstream constructors that can panic; unsupported input returns an error.
 
-Affine's upstream parameter setters can panic on invalid values. Schema validation and the adapter check multipliers and offsets before calling those setters. Rail count is limited to 2–16.
+These boundaries preserve the meaning of existing recipe rules, including derived Caesar and Rail Fence settings. No recipe-schema or fingerprint version changes are needed.
 
-## Test vectors and regression evidence
+## Compatibility checks
 
-Rust tests include:
+The adapter retains these test vectors:
 
-- Caesar shift 3: Hello, World! -> Khoor, Zruog!
-- Atbash: ABC xyz! -> ZYX cba!
-- Vigenere key lemon: ATTACK AT DAWN! -> LXFOPV EF RNHR!
-- Beaufort key key: exampletext -> ghyypnglunl
-- Affine a=5, b=8: AFFINE CIPHER -> IHHWVC SWFRCP
-- Rail Fence 3 rails: WEAREDISCOVEREDFLEEATONCE -> WECRLTEERDSOEEFEAOCAIVDEN
-- Upper/lowercase, spaces, punctuation and newlines all round-trip for every supported adapter.
-- Invalid affine multipliers, offsets, rail counts, and missing keys return errors rather than panicking.
-- Randomized reversible recipe round-trip tests include all six classical rule types.
+- Caesar shift 3: `Hello, World!` → `Khoor, Zruog!`
+- Atbash: `ABC xyz!` → `ZYX cba!`
+- Vigenere key lemon: `ATTACK AT DAWN!` → `LXFOPV EF RNHR!`
+- Beaufort key key: `exampletext` → `ghyypnglunl`
+- Affine a=5, b=8: `AFFINE CIPHER` → `IHHWVC SWFRCP`
+- Rail Fence 3 rails: `WEAREDISCOVEREDFLEEATONCE` → `WECRLTEERDSOEEFEAOCAIVDEN`
 
-These are historical teaching ciphers, **not secure encryption**. Dependency integration and passing tests do not resolve the binary-distribution notice question.
+Tests also cover mixed case, all ASCII nonletters, repeating-key position, short Rail Fence inputs, every supported rail count, invalid parameters, and randomized reversible recipe composition. Fingerprint golden vectors remain unchanged.
+
+These are historical teaching ciphers, **not secure encryption**. The remaining binary-release checklist still applies to other runtime dependencies, packaging, and platform support.
