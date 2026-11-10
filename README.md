@@ -55,7 +55,7 @@ npm run build
 npm run tauri build -- --no-bundle
 ```
 
-The desktop executable is written under `src-tauri/target/release/`. The frontend build alone is not the native application. Linux and Apple Silicon runtime acceptance have not been established by the existing Windows/Intel-Mac checks.
+The desktop executable is written under `src-tauri/target/release/`. The frontend build alone is not the native application. Native testing has covered Windows and Intel macOS; Linux and Apple Silicon have not been verified.
 
 ## Checks
 
@@ -74,6 +74,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the check workflow and native accepta
 
 Project-original code and documentation are licensed under the [MIT License](LICENSE). Third-party materials retain their own terms.
 
-Bundled dictionaries, ranking data, and adapted theme palettes retain their own licenses and attribution. See [THIRD_PARTY.md](THIRD_PARTY.md), [theme notices](docs/theme-attributions.md), and the [remaining publication checklist](docs/public-readiness.md).
+Bundled dictionaries, ranking data, and adapted theme palettes retain their own licenses and attribution. See [THIRD_PARTY.md](THIRD_PARTY.md), [theme notices](docs/theme-attributions.md), and the [binary-release checklist](docs/public-readiness.md).
 
 Report ordinary bugs through GitHub issues. For vulnerabilities or sensitive reports, follow [SECURITY.md](SECURITY.md).

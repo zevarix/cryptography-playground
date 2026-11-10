@@ -1,6 +1,6 @@
 # Community theme attribution
 
-Cryptography Playground uses independently maintained developer color palettes as optional theme presets. These palettes originate in independent open-source developer-theme projects. The application builds its own interface and CSS variables; it does not copy upstream theme UI, fonts, icons, or branding.
+Cryptography Playground adapts color palettes from the following open-source projects as optional theme presets. The interface and CSS are implemented in this repository; upstream theme UI, fonts, icons, and branding are not included.
 
 | Theme | Maintainer | Original source | License |
 | --- | --- | --- | --- |

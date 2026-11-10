@@ -20,4 +20,4 @@ The classical adapter uses **cifers 0.1.5**. Its published Cargo metadata declar
 
 Before distributing installers or executables, assemble notices for the exact resolved runtime dependencies and include the bundled-data and palette notices in the distribution materials. A successful source build does not establish that binary-distribution review.
 
-Remaining source-publication and binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md). [Issue #7](https://github.com/zevarix/cryptography-playground/issues/7) tracks the cifers notice question.
+Remaining binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md). [Issue #7](https://github.com/zevarix/cryptography-playground/issues/7) tracks the cifers notice question.
