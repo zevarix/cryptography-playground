@@ -17,7 +17,7 @@ Before submitting:
 - Test meaningful behavior and failure cases. Preserve recipe outputs unless a deliberate, versioned compatibility decision changes them.
 - Retain data provenance and third-party notices. Do not commit real passphrases, private experiment text, machine paths, credentials, or generated screenshots.
 
-For an application change, validate the accepted revision on Windows and macOS and update existing local test builds as described in AGENTS.md. Report an unavailable platform's native acceptance as pending.
+For an application change, report which platforms you tested and which remain untested. Maintainers validate the accepted revision on Windows and macOS and update their local test builds as described in AGENTS.md.
 
 ## Recipe changes
 
@@ -29,4 +29,4 @@ See [the recipe schema](docs/recipe-format.md) and [fingerprint specification](d
 
 Project-original code and documentation use the [MIT License](LICENSE). Third-party components retain their own terms; a contribution cannot relicense them.
 
-Product direction, license changes, public publication, distribution, and signing remain owner decisions. Remaining publication work is recorded in [the publication checklist](docs/public-readiness.md).
+Product direction, license changes, distribution, signing, and releases remain project-owner decisions. See [the binary-release checklist](docs/public-readiness.md) for remaining distribution work.

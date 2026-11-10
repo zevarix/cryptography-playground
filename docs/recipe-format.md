@@ -17,7 +17,7 @@ Cryptography Playground provides rule implementations in Rust and recipes as JSO
 }
 ~~~
 
-The required schemaVersion is currently 1; name/description and IDs are bounded. Each recipe has 1–16 steps, at least one enabled. Each rule has a stable type with validated options; unknown types or parameters are rejected. No scripts or arbitrary code can be embedded.
+`schemaVersion` must be 1. IDs contain 1–64 lowercase ASCII letters, digits, or hyphens. Names must be nonblank and at most 100 UTF-8 bytes; descriptions may use up to 1,024 UTF-8 bytes. Each recipe has 1–16 steps, at least one enabled. Unknown rule types or fields are rejected, and options are range-checked for enabled rules. Recipes contain data, not executable scripts.
 
 - position_shift: base 0–25, keyed true/false (passphrase optionally mixed into positional shift).
 - rotate_vowels: steps 0–4.
@@ -51,11 +51,11 @@ The required schemaVersion is currently 1; name/description and IDs are bounded.
 
 For reversible pipelines, decoding applies the enabled rules in reverse order and uses each inverse. These preserve supported ASCII input, including case, punctuation and whitespace.
 
-For lossy pipelines, the decoder reverses the final reversible suffix and retains the exact surviving intermediate. The known Recipe 001 phonetic pipeline and Recipe 002 consonant skeleton have dictionary-ranked English suggestions; other lossy combinations may lack reconstruction support. The decoder does not claim to recover destroyed original information.
+For lossy pipelines, the decoder reverses the final reversible suffix and retains the exact surviving intermediate. Phonetic rotation followed by reversible rules supports dictionary-ranked English suggestions. So does vowel removal followed by doubled-consonant collapse and a reversible suffix. Other lossy combinations have no reconstruction strategy. Recognition depends on rule types, not recipe IDs.
 
 ## Bundled examples
 
-- recipes/001.json: Phonetic Rotation with keyed shift; byte-for-byte tested against the previous Recipe 001 ciphertext.
+- recipes/001.json: Phonetic Rotation followed by a keyed position shift with base 3.
 - recipes/002.json: Consonant Skeleton, doubled-consonant collapse, unkeyed shift.
 - recipes/003.json: Word Mirror, unkeyed shift.
 - recipes/004.json: Pair swap, vowel rotation, unkeyed shift.
@@ -70,12 +70,12 @@ For lossy pipelines, the decoder reverses the final reversible suffix and retain
 
 These are editable examples, not special engine implementations. The examples use base 5 for the unkeyed shift. Users can change this rule and reorder compatible rules.
 
-The public classical cipher rules are adapters to the exact pinned MIT-licensed cifers crate version 0.1.5. See docs/classical-cipher-adoption.md for implementation, test vectors, ASCII and punctuation semantics, upstream license ambiguity, and the independent public-distribution gate.
+The classical rules use cifers 0.1.5, pinned in Cargo.toml. Its package metadata declares MIT, but its license notices still need clarification before binary distribution. See [the adapter review](classical-cipher-adoption.md) for test vectors, ASCII and punctuation behavior, and the open notice question.
 
 ## Storage and sharing
 
-Custom recipes are JSON files in a recipes subdirectory under Tauri's app-data directory. No cloud account. Saves use same-directory temporary files and verified readback; bounded to 200 user recipes and 64 KiB per file.
+Custom recipes are JSON files in a `recipes` subdirectory under Tauri's app-data directory. Saving writes a temporary file in the same directory, renames it into place, then reads it back to verify the bytes. Storage is limited to 200 user recipes and 64 KiB per file.
 
 Users can create, duplicate, enable/disable, reorder, configure, save, and delete recipes, copy JSON, or import pasted/selected .json files. Copy JSON exports to the clipboard; paste into a file to share it. A native Save As dialog is not yet implemented.
 
-The former Recipe 001 implementation remains the phonetic_rotate rule, not a special recipe selection. Semantics-changing upgrades must introduce a versioned rule or schema rather than silently changing saved recipes.
+Changes to rule semantics require a new rule or schema version rather than silently changing saved recipes.

@@ -9,7 +9,7 @@ The rule engine imports exactly **cifers = "=0.1.5"** from crates.io, rather tha
 - API and reference source: https://docs.rs/cifers/0.1.5/cifers/
 - Version reviewed: 0.1.5
 - Cargo package license metadata: MIT
-- The upstream README additionally says "MIT / Apache-2.0" while its package metadata says MIT; the published crate package was inspected and contains no LICENSE file. **Before public distribution, verify definitive license notices and attribution for this package.** Public binary-distribution notice requirements are tracked in [issue #7](https://github.com/zevarix/cryptography-playground/issues/7).
+- The upstream README additionally says "MIT / Apache-2.0" while its package metadata says MIT; the inspected package contains no LICENSE file. Resolve the license notices and attribution before distributing binaries; [issue #7](https://github.com/zevarix/cryptography-playground/issues/7) tracks this question.
 
 No app runtime downloads or online cipher service are required.
 
@@ -28,11 +28,12 @@ Vigenere and Beaufort use the **same workbench passphrase** already used by othe
 
 All rules are **reversible on supported ASCII input**. The upstream implementations operate on ASCII Latin letters; the existing application explicitly rejects non-ASCII source data and limits message size to 16 KiB. Rail Fence in particular transposes every input character, including spaces and punctuation, so it is exact and composable. Historical examples often discard formatting; this rule intentionally does not.
 
-Affine's upstream parameter setters can panic on invalid values. Schema validation and the adapter both guard against invalid multipliers and offsets before calling the setters. Rail count is capped to keep the transposition cost bounded. The older app recipes 001–004 retain their original schema, rule implementations, and ciphertext behavior.
+Affine's upstream parameter setters can panic on invalid values. Schema validation and the adapter check multipliers and offsets before calling those setters. Rail count is limited to 2–16.
 
 ## Test vectors and regression evidence
 
 Rust tests include:
+
 - Caesar shift 3: Hello, World! -> Khoor, Zruog!
 - Atbash: ABC xyz! -> ZYX cba!
 - Vigenere key lemon: ATTACK AT DAWN! -> LXFOPV EF RNHR!
@@ -41,6 +42,6 @@ Rust tests include:
 - Rail Fence 3 rails: WEAREDISCOVEREDFLEEATONCE -> WECRLTEERDSOEEFEAOCAIVDEN
 - Upper/lowercase, spaces, punctuation and newlines all round-trip for every supported adapter.
 - Invalid affine multipliers, offsets, rail counts, and missing keys return errors rather than panicking.
-- Existing randomized reversible recipe round-trip tests now include all six classical rule types.
+- Randomized reversible recipe round-trip tests include all six classical rule types.
 
-These ciphers are historical teaching algorithms, **not secure encryption**. No modern cryptography or user security claims are made. Keep integration, author licensing, and potential public release as separate gates.
+These are historical teaching ciphers, **not secure encryption**. Dependency integration and passing tests do not resolve the binary-distribution notice question.
