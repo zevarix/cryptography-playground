@@ -9,7 +9,7 @@ The rule engine imports exactly **cifers = "=0.1.5"** from crates.io, rather tha
 - API and reference source: https://docs.rs/cifers/0.1.5/cifers/
 - Version reviewed: 0.1.5
 - Cargo package license metadata: MIT
-- The upstream README additionally says "MIT / Apache-2.0" while its package metadata says MIT; the published crate package was inspected and contains no LICENSE file. **Before public distribution, verify definitive license notices and attribution for this package.** This private integration does not grant publication approval.
+- The upstream README additionally says "MIT / Apache-2.0" while its package metadata says MIT; the published crate package was inspected and contains no LICENSE file. **Before public distribution, verify definitive license notices and attribution for this package.** Public binary-distribution notice requirements are tracked in [issue #7](https://github.com/zevarix/cryptography-playground/issues/7).
 
 No app runtime downloads or online cipher service are required.
 
