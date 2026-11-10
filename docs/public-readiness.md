@@ -2,6 +2,8 @@
 
 This checklist separates source publication from distributing a desktop binary. Product, licensing, publication, signing, and release decisions remain with the owner.
 
+The [source repository](https://github.com/zevarix/cryptography-playground) is public under MIT for project-original code and documentation. The binary-release work below remains separate.
+
 ## Source preparation
 
 - [x] Describe the current 12 examples, editable recipes, speculative decoding, and fingerprints.
@@ -14,7 +16,7 @@ This checklist separates source publication from distributing a desktop binary. 
 - [x] Apply the owner-selected MIT license to project-original code and documentation, with license text and package metadata.
 - [x] Document retained third-party notice questions and their binary-distribution gate.
 - [x] Owner approved merging the preparation and making the source repository public.
-- [ ] Apply and verify public visibility, branch protection, and security settings.
+- [x] Apply and verify public visibility, branch protection, and security settings.
 
 ## CI scope and cost
 
