@@ -5,6 +5,7 @@ import {
   readAppearance, type Appearance, type AppearanceMode, type FontChoice,
 } from "./theme";
 import RecipePage from "./RecipePage";
+import classicalCipherLicense from "../licenses/ciphers-0.1.0-MIT.txt?raw";
 import {
   RULE_CATALOG, labelForRule, lossyRule, recipeNeedsKey,
   type RecipeFingerprint,
@@ -608,6 +609,11 @@ function App() {
                   <section className="settings-group"><div className="settings-row"><span>Current experiment</span><span>{activeRecipe?.name ?? "None"}</span></div>
                     <div className="settings-row"><span>Technology</span><span>Rust · React · Tauri 2</span></div>
                   </section><p className="helper-text">An independent, experimental cryptography playground. It is not suitable for protecting sensitive data.</p>
+                  <details className="advanced cipher-license">
+                    <summary>Classical cipher library license</summary>
+                    <p>ciphers · MIT</p>
+                    <pre className="license-notice">{classicalCipherLicense}</pre>
+                  </details>
                 </div>
               )}
             </article>

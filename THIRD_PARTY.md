@@ -16,8 +16,8 @@ The CMU license requires retained notices for source and binary redistribution. 
 
 Cargo.lock and package-lock.json pin resolved Rust and JavaScript packages, which retain their own terms. This repository references those dependencies rather than vendoring their implementations.
 
-The classical adapter uses **cifers 0.1.5**. Its published Cargo metadata declares MIT; its README says “MIT / Apache-2.0,” and the inspected package lacks a LICENSE file. The crates.io package entry provides no repository link; the publisher's [upstream repository](https://github.com/PhantomSoap/cifers) was located separately and likewise has no standalone license file. [The adapter review](docs/classical-cipher-adoption.md) records this unresolved attribution/notice question. Do not represent it as fully cleared for a public binary release.
+The classical adapter uses **ciphers 0.1.0** under MIT, Copyright (c) 2019 Stephen Radley. Its complete [license notice](licenses/ciphers-0.1.0-MIT.txt) is retained from the published package and displayed in the app's About page. The notice is embedded in the compiled frontend and native application. [The adapter documentation](docs/classical-cipher-adoption.md) records package provenance and formatting compatibility. The previous cifers dependency has been removed; [issue #7](https://github.com/zevarix/cryptography-playground/issues/7) records that notice-gap resolution.
 
 Before distributing installers or executables, assemble notices for the exact resolved runtime dependencies and include the bundled-data and palette notices in the distribution materials. A successful source build does not establish that binary-distribution review.
 
-Remaining binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md). [Issue #7](https://github.com/zevarix/cryptography-playground/issues/7) tracks the cifers notice question.
+Remaining binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md).

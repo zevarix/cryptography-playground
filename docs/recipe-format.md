@@ -25,7 +25,7 @@ Cryptography Playground provides rule implementations in Rust and recipes as JSO
 - caesar: shift 0-25 (shift 13 is ROT13).
 - atbash: no parameters.
 - vigenere and beaufort: require the workbench passphrase (1-64 ASCII English letters); the key is not saved in JSON.
-- affine: multiplier a is one of 1,3,5,7,9,11,15,17,19,21,23,25; offset b is 0-25. Invalid values are rejected before upstream setters can panic.
+- affine: multiplier a is one of 1,3,5,7,9,11,15,17,19,21,23,25; offset b is 0-25. Invalid values are rejected before upstream constructors can panic.
 - rail_fence: rails 2-16. All ASCII characters are transposed and restored, including whitespace and punctuation.
 - derived_caesar and derived_rail_fence: no numeric parameters in JSON; their values derive from the exact rule configuration, zero-based step position and workbench passphrase (1-64 ASCII English letters). See [the fingerprint/derivation specification](recipe-fingerprints.md).
 
@@ -70,7 +70,7 @@ For lossy pipelines, the decoder reverses the final reversible suffix and retain
 
 These are editable examples, not special engine implementations. The examples use base 5 for the unkeyed shift. Users can change this rule and reorder compatible rules.
 
-The classical rules use cifers 0.1.5, pinned in Cargo.toml. Its package metadata declares MIT, but its license notices still need clarification before binary distribution. See [the adapter review](classical-cipher-adoption.md) for test vectors, ASCII and punctuation behavior, and the open notice question.
+The classical rules use ciphers 0.1.0, pinned in Cargo.toml. Its MIT notice is retained and included in the app. See [the adapter documentation](classical-cipher-adoption.md) for provenance, test vectors, and ASCII formatting behavior.
 
 ## Storage and sharing
 

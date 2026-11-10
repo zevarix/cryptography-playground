@@ -4,7 +4,6 @@ The [source repository](https://github.com/zevarix/cryptography-playground) is p
 
 Before distributing installers or executables:
 
-- Resolve the cifers license-notice question in [issue #7](https://github.com/zevarix/cryptography-playground/issues/7) and the [adapter review](classical-cipher-adoption.md).
 - Include notices for the exact resolved runtime dependencies, bundled data, and adapted palettes. See [THIRD_PARTY.md](../THIRD_PARTY.md).
 - Test the release executable on each advertised platform. Windows and Intel macOS development testing does not establish Linux or Apple Silicon support.
 - Review release configuration and the renderer/native command boundary, including the currently unset CSP.
