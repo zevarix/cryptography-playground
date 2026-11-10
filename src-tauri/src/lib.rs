@@ -1,3 +1,4 @@
+mod documents;
 mod engine;
 mod recipes;
 

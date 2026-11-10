@@ -510,7 +510,7 @@ pub fn decode(
     })
 }
 
-mod classical;
+pub(crate) mod classical;
 pub mod fingerprint;
 pub mod lookup;
 pub mod skeleton;

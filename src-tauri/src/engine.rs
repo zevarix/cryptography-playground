@@ -187,6 +187,56 @@ pub(crate) fn phonetic_transform(plaintext: &str, passphrase: &str) -> Result<St
     Ok(intermediate)
 }
 
+/// Streaming document adapter. Rotation state is modular and persists across
+/// all words; punctuation/case are intentionally lost as in schema 1.
+pub(crate) struct DocumentPhonetic {
+    key: String,
+    counters: HashMap<&'static str, usize>,
+    vowel: usize,
+}
+pub(crate) fn document_word_limit() -> usize {
+    static LIMIT: OnceLock<usize> = OnceLock::new();
+    *LIMIT.get_or_init(|| dictionary().keys().map(String::len).max().unwrap_or(0))
+}
+impl DocumentPhonetic {
+    pub fn new(passphrase: &str) -> Result<Self, String> {
+        let key = key(passphrase)?;
+        let vowel = usize::from(key.as_bytes()[0] - b'a') % 5;
+        Ok(Self {
+            key,
+            counters: HashMap::new(),
+            vowel,
+        })
+    }
+    pub fn word(&mut self, word: &str) -> Result<String, String> {
+        let pronunciation = dictionary()
+            .get(word)
+            .ok_or("Word is outside the bundled pronunciation dictionary vocabulary.")?;
+        let mut output = String::new();
+        let mut previous_vowel = false;
+        for raw in pronunciation {
+            let sound = phone(raw);
+            if is_vowel(sound) {
+                if !previous_vowel {
+                    output.push(char::from(VOWEL_OUTPUTS[self.vowel]));
+                    self.vowel = (self.vowel + 1) % 5;
+                }
+                previous_vowel = true;
+            } else {
+                let variants =
+                    choices(sound).ok_or("Unsupported phoneme in pronunciation dictionary.")?;
+                let count = self.counters.entry(sound).or_default();
+                output.push_str(
+                    variants[(initial(&self.key, sound, variants.len()) + *count) % variants.len()],
+                );
+                *count = (*count + 1) % variants.len();
+                previous_vowel = false;
+            }
+        }
+        Ok(output)
+    }
+}
+
 pub fn encode(plaintext: &str, passphrase: &str) -> Result<Encoded, String> {
     let key = key(passphrase)?;
     let (intermediate, words, phonemes) = phonetic_transform_impl(plaintext, &key)?;
