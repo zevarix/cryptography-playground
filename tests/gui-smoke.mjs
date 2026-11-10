@@ -1,6 +1,7 @@
 // Isolated frontend acceptance: the Tauri invoke bridge is mocked.
 // Rust cipher semantics and native window acceptance are tested separately.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, stat, readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -321,6 +322,9 @@ try {
   await page.keyboard.press("Enter");
   assert.equal(await page.locator(".cipher-license").getAttribute("open"), "");
   const expectedLicense = await readFile(resolve(root, "licenses/ciphers-0.1.0-MIT.txt"), "utf8");
+  assert.equal(createHash("sha256").update(expectedLicense).digest("hex"),
+    "45a93980856752724f1b64314e3902539d5d8953ccaef7ca5cd523c33e2c11a0",
+    "The embedded notice must retain the published package bytes on every platform.");
   assert.equal(await page.locator(".license-notice").textContent(), expectedLicense);
   assert.match(expectedLicense, /Copyright \(c\) 2019 Stephen Radley/);
   const pngLicense = resolve(artifacts, "notebook-classical-license.png");
