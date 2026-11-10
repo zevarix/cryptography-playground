@@ -52,18 +52,25 @@ Build the frontend or an unbundled local desktop executable:
 
 ```sh
 npm run build
-npm run tauri build -- --no-bundle
+npm run tauri build -- --no-bundle --no-sign -- --locked
 ```
 
-The desktop executable is written under `src-tauri/target/release/`. The frontend build alone is not the native application. Native testing has covered Windows and Intel macOS; Linux and Apple Silicon have not been verified.
+The desktop executable is written under `src-tauri/target/release/`. The frontend build alone is not the native application. Native testing has covered Windows and Intel macOS. Linux CI builds and smoke-tests the application on Ubuntu 24.04 x64. Apple Silicon has not been verified.
 
 ## Checks
 
 ```sh
-cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml --package cryptography-playground -- --check
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 npm run build
+```
+
+Formatting targets project-owned code; retain the [GLib security backport](src-tauri/vendor/README.md) without unrelated formatting changes. On Linux, also run its optimized regression and verify the selected dependency graph:
+
+```sh
+cargo test --manifest-path tests/glib-regression/Cargo.toml --release --locked
+python3 ci/check_glib.py
 ```
 
 For the isolated frontend smoke test, set `CHROME_EXECUTABLE` to an installed Chromium-family browser executable and run `npm run test:gui`. It launches a separate headless browser and mocks Tauri commands; it does not establish native cipher or filesystem correctness. Screenshots are written to ignored `test-artifacts/`.
