@@ -13,6 +13,6 @@ Cryptography Playground uses independently maintained developer color palettes a
 
 The project-original Notebook Paper and Notebook Ink themes are not third-party presets.
 
-These are palette mappings adapted for this application. They do not represent the complete upstream token systems or every official variant. Retained notices and the upstream Gruvbox declaration are in [theme-license-notices.md](theme-license-notices.md). The application license remains an independent owner decision.
+These are palette mappings adapted for this application. They do not represent the complete upstream token systems or every official variant. Retained notices and the upstream Gruvbox declaration are in [theme-license-notices.md](theme-license-notices.md). These retained palette terms are separate from the [MIT License](../LICENSE) for project-original code and documentation.
 
 Appearance mode, theme, accent, background, foreground, and font are saved locally in the app's WebView storage. No remote theme or telemetry service is contacted.

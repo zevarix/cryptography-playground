@@ -11,7 +11,7 @@ This checklist separates source publication from distributing a desktop binary. 
 - [x] Prepare pinned-action validation and weekly dependency updates.
 - [x] Validate the candidate and verify the first full GitHub Actions run.
 - [x] Review source and published branch history with targeted credential/private-context patterns; record the scope and limitations in the pull request.
-- [ ] Select the license for project-original code and documentation; add its text and package metadata.
+- [x] Apply the owner-selected MIT license to project-original code and documentation, with license text and package metadata.
 - [x] Document retained third-party notice questions and their binary-distribution gate.
 - [ ] Obtain the owner's public-publication decision and apply repository settings.
 

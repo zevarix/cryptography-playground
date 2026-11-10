@@ -72,7 +72,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the check workflow and native accepta
 
 ## Licensing and project status
 
-The repository is being prepared for public source publication. **An application license has not yet been selected, and publication remains an owner decision.** There is no public binary-release or signing claim.
+Project-original code and documentation are licensed under the [MIT License](LICENSE). Third-party materials retain their own terms.
+
+The repository is being prepared for public source publication, which remains an owner decision. There is no public binary-release or signing claim.
 
 Bundled dictionaries, ranking data, and adapted theme palettes retain their own licenses and attribution. See [THIRD_PARTY.md](THIRD_PARTY.md), [theme notices](docs/theme-attributions.md), and the [remaining publication checklist](docs/public-readiness.md).
 

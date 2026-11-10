@@ -27,4 +27,6 @@ See [the recipe schema](docs/recipe-format.md) and [fingerprint specification](d
 
 ## Project and release decisions
 
-Product direction, application licensing, public publication, distribution, and signing remain owner decisions. Third-party components retain their own terms; a contribution cannot relicense them. The current licensing decision is recorded in [the publication checklist](docs/public-readiness.md).
+Project-original code and documentation use the [MIT License](LICENSE). Third-party components retain their own terms; a contribution cannot relicense them.
+
+Product direction, license changes, public publication, distribution, and signing remain owner decisions. Remaining publication work is recorded in [the publication checklist](docs/public-readiness.md).

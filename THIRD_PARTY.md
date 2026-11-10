@@ -1,6 +1,6 @@
 # Third-party materials
 
-The application, bundled data, adapted palettes, and build dependencies do not all have the same license. Selecting a license for project-original code does not replace these terms.
+Project-original code and documentation use the [MIT License](LICENSE). Bundled data, adapted palettes, and dependencies retain the separate terms and notices below; the project's MIT license does not relicense them.
 
 | Material | Provenance | Terms and notices |
 | --- | --- | --- |
@@ -20,4 +20,4 @@ The classical adapter uses **cifers 0.1.5**. Its published Cargo metadata declar
 
 Before distributing installers or executables, assemble notices for the exact resolved runtime dependencies and include the bundled-data and palette notices in the distribution materials. A successful source build does not establish that binary-distribution review.
 
-The application license decision and remaining checks are recorded in [docs/public-readiness.md](docs/public-readiness.md).
+Remaining source-publication and binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md). [Issue #7](https://github.com/zevarix/cryptography-playground/issues/7) tracks the cifers notice question.
