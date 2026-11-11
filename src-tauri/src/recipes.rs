@@ -171,7 +171,7 @@ impl Recipe {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StageOutput {
     pub label: String,
@@ -179,7 +179,7 @@ pub struct StageOutput {
     pub lossy: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecipeResult {
     pub output: String,

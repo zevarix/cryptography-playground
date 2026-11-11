@@ -30,7 +30,7 @@ pub struct WordSuggestion {
     pub compatible_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Reconstruction {
     pub suggested: Option<String>,
@@ -40,7 +40,7 @@ pub struct Reconstruction {
 
 /// One user-selected interpretation. Indices refer to whitespace-delimited
 /// words in the recovered intermediate (zero-based), never character offsets.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WordChoice {
     pub index: usize,

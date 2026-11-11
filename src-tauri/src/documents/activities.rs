@@ -312,10 +312,11 @@ impl AppDocuments {
             },
         )
     }
-    pub fn reconstruct(
+    pub fn reconstruct_with_key(
         &self,
         job_id: String,
         choices: Vec<super::reconstruct::DocChoice>,
+        key: Option<String>,
     ) -> Result<ActivityInfo, String> {
         let store = self.store().clone();
         store.job(&job_id)?.result()?;
@@ -324,7 +325,13 @@ impl AppDocuments {
             None,
             move |control| {
                 Ok(ActivityResult::Reconstructed {
-                    reading: super::reconstruct::run(&store, &job_id, &choices, control)?,
+                    reading: super::reconstruct::run_with_key(
+                        &store,
+                        &job_id,
+                        &choices,
+                        key.as_deref(),
+                        control,
+                    )?,
                 })
             },
         )

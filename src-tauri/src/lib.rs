@@ -51,22 +51,14 @@ fn recipe_fingerprint(
 
 #[tauri::command]
 fn evaluate_recipe(
+    library: tauri::State<'_, std::sync::Arc<documents::experiments::Library>>,
     recipe: recipes::Recipe,
     text: String,
     key: String,
     direction: String,
     choices: Vec<engine::WordChoice>,
-) -> Result<recipes::RecipeResult, String> {
-    match direction.as_str() {
-        "encode" => {
-            if !choices.is_empty() {
-                return Err("Cannot select plaintext candidates while encoding.".into());
-            }
-            recipes::encode(&recipe, &text, &key)
-        }
-        "decode" => recipes::decode(&recipe, &text, &key, &choices),
-        _ => Err("Direction must be encode or decode.".into()),
-    }
+) -> Result<documents::experiments::Evaluated, String> {
+    library.evaluate(recipe, text, key, direction, choices)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -75,6 +67,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             app.manage(documents::activities::AppDocuments::new().map_err(std::io::Error::other)?);
+            app.manage(std::sync::Arc::new(documents::experiments::Library::new(
+                app.path().app_data_dir()?.join("experiments"),
+            )));
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -102,6 +97,11 @@ pub fn run() {
             save_recipe,
             delete_saved_recipe,
             evaluate_recipe,
+            documents::experiments::commands::save_text_experiment,
+            documents::experiments::commands::save_file_experiment,
+            documents::experiments::commands::list_experiments,
+            documents::experiments::commands::delete_experiment,
+            documents::experiments::commands::open_experiment,
             recipe_fingerprint,
             documents::commands::doc_open,
             documents::commands::doc_open_drop,

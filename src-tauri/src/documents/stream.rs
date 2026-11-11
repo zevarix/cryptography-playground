@@ -79,7 +79,7 @@ impl ScalarReader<File> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct ArtifactStats {
     pub bytes: u64,
     pub scalars: u64,

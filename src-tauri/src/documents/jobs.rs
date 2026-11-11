@@ -25,7 +25,7 @@ pub enum Direction {
     Decode,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StageInfo {
     pub label: String,
@@ -46,6 +46,7 @@ pub struct JobInfo {
     pub fingerprint: RecipeFingerprint,
     pub direction: Direction,
     pub exact: bool,
+    pub restored: bool,
     pub stages: Vec<StageInfo>,
     pub note: String,
 }
@@ -114,6 +115,25 @@ impl DocumentStore {
                 registry: Mutex::new(Registry::default()),
             }),
         })
+    }
+    pub(super) fn adopt_restored(&self, job: Arc<Job>) -> Result<(), String> {
+        let mut registry = self
+            .inner
+            .registry
+            .lock()
+            .map_err(|_| "Document registry is unavailable.")?;
+        let id = job
+            .state
+            .lock()
+            .map_err(|_| "Document job state is unavailable.")?
+            .info
+            .id
+            .clone();
+        registry
+            .documents
+            .insert(job.source.info.id.clone(), job.source.clone());
+        registry.jobs.insert(id, job);
+        Ok(())
     }
     pub fn capture(&self, source: &Path, control: &Control) -> Result<DocumentInfo, String> {
         let snapshot = storage::capture(source, self.inner.session.path(), control)?;
@@ -262,6 +282,7 @@ impl DocumentStore {
             fingerprint,
             direction,
             exact,
+            restored: false,
             stages: Vec::new(),
             note: String::new(),
         };
