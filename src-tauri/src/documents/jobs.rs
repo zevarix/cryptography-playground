@@ -105,9 +105,7 @@ pub struct DocumentStore {
 
 impl DocumentStore {
     pub fn new() -> Result<Self, String> {
-        let session = tempfile::Builder::new()
-            .prefix("cryptoplay-documents-")
-            .tempdir()
+        let session = super::private_tempdir("cryptoplay-documents-", None)
             .map_err(|e| io_error("Cannot create private document session", e))?;
         Ok(Self {
             inner: Arc::new(Inner {
@@ -260,9 +258,7 @@ impl DocumentStore {
             recipes::validate_inputs(&recipe, &text, &key)?;
         }
         let fingerprint = fingerprint::fingerprint(&recipe)?;
-        let root = tempfile::Builder::new()
-            .prefix("job-")
-            .tempdir_in(self.inner.session.path())
+        let root = super::private_tempdir("job-", Some(self.inner.session.path()))
             .map_err(|e| io_error("Cannot create document job", e))?;
         let id = root
             .path()

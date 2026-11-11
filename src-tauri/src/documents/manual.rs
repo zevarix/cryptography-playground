@@ -22,9 +22,7 @@ pub(crate) fn evaluate(
     if !undo && !choices.is_empty() {
         return Err("Cannot select plaintext candidates while encoding.".into());
     }
-    let root = tempfile::Builder::new()
-        .prefix("cryptoplay-notebook-")
-        .tempdir()
+    let root = super::private_tempdir("cryptoplay-notebook-", None)
         .map_err(|e| io_error("Cannot create notebook artifacts", e))?;
     let mut current = root.path().join("source");
     fs::write(&current, text).map_err(|e| io_error("Cannot snapshot notebook text", e))?;

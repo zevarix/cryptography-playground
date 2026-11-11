@@ -9,9 +9,7 @@ pub(super) fn restore_file(
     store: &DocumentStore,
     control: &Control,
 ) -> Result<Opened, String> {
-    let snapshot_root = tempfile::Builder::new()
-        .prefix("restored-source-")
-        .tempdir()
+    let snapshot_root = crate::documents::private_tempdir("restored-source-", None)
         .map_err(|e| io_error("Cannot create restored source", e))?;
     let raw_source = snapshot_root.path().join("source");
     let mut raw = OpenOptions::new()
@@ -91,9 +89,7 @@ pub(super) fn restore_file(
     }
     let result = artifact(Role::Result, "Exact result".into(), !capture.exact)?;
     let (reading, choices) = if let Some(saved) = capture.reading {
-        let reading_root = tempfile::Builder::new()
-            .prefix("reading-")
-            .tempdir_in(root.path())
+        let reading_root = crate::documents::private_tempdir("reading-", Some(root.path()))
             .map_err(|e| io_error("Cannot restore reading", e))?;
         let reading_id = reading_root
             .path()
@@ -136,6 +132,7 @@ pub(super) fn restore_file(
                 _root: reading_root,
                 info,
                 artifact: reading_artifact,
+                candidates_stats: stats(&candidates, control)?,
                 candidates,
                 choices: choices.clone(),
             })),

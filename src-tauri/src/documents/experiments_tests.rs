@@ -571,6 +571,12 @@ fn two_hundred_completed_entries_refuse_a_new_save_without_losing_entries() {
         fs::create_dir(&path).unwrap();
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         value["summary"]["id"] = id.into();
+        let mut payload = value.clone();
+        payload.as_object_mut().unwrap().remove("metadataDigest");
+        use sha2::Digest;
+        value["metadataDigest"] =
+            super::stream::digest_hex(&sha2::Sha256::digest(serde_json::to_vec(&payload).unwrap()))
+                .into();
         fs::write(
             path.join("manifest.json"),
             serde_json::to_vec(&value).unwrap(),
@@ -585,4 +591,324 @@ fn two_hundred_completed_entries_refuse_a_new_save_without_losing_entries() {
     let listing = library.list().unwrap();
     assert_eq!(listing.entries.len(), 200);
     assert!(listing.problems.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn persisted_and_restored_content_directories_are_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::new(root.path().join("experiments"));
+    let source = root.path().join("source");
+    fs::write(&source, "Private source").unwrap();
+    let store = DocumentStore::new().unwrap();
+    let document = store.capture(&source, &Control::default()).unwrap();
+    let job = store
+        .start(&document.id, recipe(), "".into(), Direction::Encode)
+        .unwrap();
+    finish(&store, &job.id);
+    let saved = library
+        .save_file(&store, &job.id, None, "Private", &Control::default())
+        .unwrap();
+    let Opened::File { job: restored, .. } = library
+        .open(&saved.id, &store, &Control::default())
+        .unwrap()
+    else {
+        panic!("expected file")
+    };
+    let working = store.job(&restored.id).unwrap();
+    for path in [
+        root.path().join("experiments"),
+        root.path().join("experiments").join(&saved.id),
+        working.root.path().to_path_buf(),
+        working.source._root.path().to_path_buf(),
+    ] {
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o700,
+            "{}",
+            path.display()
+        );
+    }
+    let text = library
+        .evaluate(
+            recipe(),
+            "Private text".into(),
+            "".into(),
+            "encode".into(),
+            vec![],
+        )
+        .unwrap();
+    let saved = library
+        .save_text(&text.run_id, "Private text", &Control::default())
+        .unwrap();
+    assert_eq!(
+        fs::metadata(root.path().join("experiments").join(saved.id))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+}
+
+#[test]
+fn parseable_text_capture_corruption_is_rejected_after_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("experiments");
+    let library = Library::new(directory.clone());
+    let run = library
+        .evaluate(
+            recipe(),
+            "Hello".into(),
+            "privatepassphrase".into(),
+            "encode".into(),
+            vec![],
+        )
+        .unwrap();
+    let healthy = library
+        .save_text(&run.run_id, "Healthy", &Control::default())
+        .unwrap();
+    let mut corrupted = Vec::new();
+    for field in [
+        "output",
+        "intermediate",
+        "stage",
+        "choices",
+        "recipe",
+        "source",
+        "direction",
+    ] {
+        let saved = library
+            .save_text(&run.run_id, field, &Control::default())
+            .unwrap();
+        let path = directory.join(&saved.id).join("manifest.json");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let capture = &mut value["capture"]["capture"];
+        match field {
+            "output" => capture["result"]["output"] = "Wrong".into(),
+            "intermediate" => capture["result"]["intermediate"] = "Wrong".into(),
+            "stage" => capture["result"]["stages"][0]["text"] = "Wrong".into(),
+            "choices" => capture["choices"] = serde_json::json!([{"index":0,"candidate":"wrong"}]),
+            "recipe" => capture["recipe"]["steps"][0]["rule"]["shift"] = 4.into(),
+            "source" => capture["source"] = "Wrong".into(),
+            _ => capture["direction"] = "decode".into(),
+        }
+        fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
+        corrupted.push(saved.id);
+    }
+    drop(library);
+    let library = Library::new(directory);
+    let store = DocumentStore::new().unwrap();
+    for id in &corrupted {
+        assert!(
+            library.open(id, &store, &Control::default()).is_err(),
+            "{id}"
+        );
+    }
+    let listed = library.list().unwrap();
+    assert_eq!(listed.entries.len(), 1);
+    assert_eq!(listed.entries[0].id, healthy.id);
+    assert_eq!(listed.problems.len(), 7);
+}
+
+#[test]
+fn selected_text_reading_must_reencode_to_the_complete_captured_ciphertext() {
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::new(root.path().join("experiments"));
+    let mut recipe = recipe();
+    recipe.schema_version = 1;
+    recipe.steps = vec![
+        Step {
+            enabled: true,
+            rule: Rule::RemoveVowels,
+        },
+        Step {
+            enabled: true,
+            rule: Rule::CollapseDoubles,
+        },
+    ];
+    let choices = vec![crate::engine::WordChoice {
+        index: 0,
+        candidate: "the".into(),
+    }];
+    let original = library
+        .evaluate(
+            recipe.clone(),
+            "Th!".into(),
+            "".into(),
+            "decode".into(),
+            choices.clone(),
+        )
+        .unwrap(); // Standalone evaluation keeps its prior semantics.
+    let saved = library
+        .save_text(&original.run_id, "Preserved", &Control::default())
+        .unwrap();
+    let Opened::Text { source, run_id, .. } = library
+        .open(
+            &saved.id,
+            &DocumentStore::new().unwrap(),
+            &Control::default(),
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(
+        library
+            .revise(&run_id, &recipe, &source, "", &choices)
+            .is_err()
+    );
+    assert!(library.revise(&run_id, &recipe, &source, "", &[]).is_err());
+    assert!(
+        library
+            .revise(&run_id, &recipe, "th", "", &choices)
+            .is_err()
+    );
+    let mut edited = recipe.clone();
+    edited.steps.push(Step {
+        enabled: true,
+        rule: Rule::Caesar { shift: 3 },
+    });
+    assert!(
+        library
+            .revise(&run_id, &edited, &source, "", &choices)
+            .is_err()
+    );
+    let preserved = library
+        .save_text(&run_id, "Still preserved", &Control::default())
+        .unwrap();
+    let Opened::Text { source: still, .. } = library
+        .open(
+            &preserved.id,
+            &DocumentStore::new().unwrap(),
+            &Control::default(),
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert_eq!(still, "Th!");
+    let valid = library
+        .evaluate(
+            recipe.clone(),
+            "th".into(),
+            "".into(),
+            "decode".into(),
+            vec![],
+        )
+        .unwrap();
+    let next = library
+        .revise(&valid.run_id, &recipe, "th", "", &choices)
+        .unwrap();
+    assert_eq!(next.result.output, "the");
+    let reset = library
+        .revise(&next.run_id, &recipe, "th", "", &[])
+        .unwrap();
+    assert!(!reset.result.output.is_empty());
+}
+
+#[test]
+fn candidate_records_changed_after_reconstruction_cannot_become_a_new_capture() {
+    use super::reconstruct;
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::new(root.path().join("experiments"));
+    let source = root.path().join("source");
+    fs::write(&source, "th").unwrap();
+    let store = DocumentStore::new().unwrap();
+    let document = store.capture(&source, &Control::default()).unwrap();
+    let mut recipe = recipe();
+    recipe.steps = vec![
+        Step {
+            enabled: true,
+            rule: Rule::RemoveVowels,
+        },
+        Step {
+            enabled: true,
+            rule: Rule::CollapseDoubles,
+        },
+    ];
+    let job = store
+        .start(&document.id, recipe, "".into(), Direction::Decode)
+        .unwrap();
+    finish(&store, &job.id);
+    let info = reconstruct::run(&store, &job.id, &[], &Control::default()).unwrap();
+    let reading = reconstruct::current(&store, &job.id, &info.id).unwrap();
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(&reading.candidates).unwrap()).unwrap();
+    value["alternatives"][0] = "synthetic".into();
+    let mut bytes = serde_json::to_vec(&value).unwrap();
+    bytes.push(b'\n');
+    fs::write(&reading.candidates, bytes).unwrap();
+    assert!(
+        library
+            .save_file(
+                &store,
+                &job.id,
+                Some(&info.id),
+                "Changed candidates",
+                &Control::default()
+            )
+            .is_err()
+    );
+    assert!(library.list().unwrap().entries.is_empty());
+}
+
+#[test]
+fn deletion_preserves_unknown_and_incomplete_directories() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("experiments");
+    fs::create_dir(&directory).unwrap();
+    let unknown = directory.join("experiment-unfamiliar");
+    fs::create_dir(&unknown).unwrap();
+    fs::write(unknown.join("human-notes.txt"), "Keep me").unwrap();
+    let before = fs::metadata(&unknown).unwrap().permissions();
+    let library = Library::new(directory);
+    assert!(library.delete("experiment-unfamiliar").is_err());
+    assert_eq!(fs::metadata(&unknown).unwrap().permissions(), before);
+    assert_eq!(
+        fs::read_to_string(unknown.join("human-notes.txt")).unwrap(),
+        "Keep me"
+    );
+}
+
+#[test]
+fn deletion_requires_original_owned_metadata_but_allows_damaged_artifact_cleanup() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("experiments");
+    let library = Library::new(directory.clone());
+    let source = root.path().join("source");
+    fs::write(&source, "Hello").unwrap();
+    let store = DocumentStore::new().unwrap();
+    let document = store.capture(&source, &Control::default()).unwrap();
+    let job = store
+        .start(&document.id, recipe(), "".into(), Direction::Encode)
+        .unwrap();
+    finish(&store, &job.id);
+    let saved = library
+        .save_file(&store, &job.id, None, "Owned", &Control::default())
+        .unwrap();
+    let entry = directory.join(&saved.id);
+    let original = root.path().join("original-owned-entry");
+    fs::rename(&entry, &original).unwrap();
+    fs::create_dir(&entry).unwrap();
+    fs::write(entry.join("human-notes"), "Keep me").unwrap();
+    assert!(library.delete(&saved.id).is_err());
+    assert_eq!(
+        fs::read_to_string(entry.join("human-notes")).unwrap(),
+        "Keep me"
+    );
+    fs::remove_file(entry.join("human-notes")).unwrap();
+    fs::remove_dir(&entry).unwrap();
+    fs::rename(&original, &entry).unwrap();
+    fs::write(entry.join("result"), "damaged").unwrap();
+    assert!(
+        library
+            .open(&saved.id, &store, &Control::default())
+            .is_err()
+    );
+    library.delete(&saved.id).unwrap();
+    assert!(!entry.exists());
+    assert_eq!(fs::read_to_string(source).unwrap(), "Hello");
 }

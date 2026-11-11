@@ -4,7 +4,7 @@ use super::{
     jobs::{Artifact, Direction, DocumentStore, Job, JobInfo, JobState, StageInfo},
     reconstruct::{self, DocChoice, Reading, ReadingInfo, ReadingWord},
     storage::{self, DocumentInfo},
-    stream::{ArtifactStats, BUFFER, ScalarReader, digest_hex, io_error},
+    stream::{ArtifactStats, BUFFER, digest_hex, io_error},
 };
 use crate::{
     engine::WordChoice,
@@ -142,6 +142,7 @@ enum Capture {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Manifest {
     schema_version: u8,
+    metadata_digest: String,
     summary: Summary,
     capture: Capture,
     artifacts: Vec<SavedArtifact>,
@@ -198,6 +199,48 @@ impl Library {
             choices,
         })?;
         Ok(Evaluated { run_id, result })
+    }
+    pub fn revise(
+        &self,
+        run_id: &str,
+        recipe: &Recipe,
+        source: &str,
+        key: &str,
+        choices: &[WordChoice],
+    ) -> Result<Evaluated, String> {
+        let mut capture = self
+            .captures
+            .lock()
+            .map_err(|_| "Text captures are unavailable.")?
+            .iter()
+            .find(|(id, _)| id == run_id)
+            .map(|(_, capture)| capture.clone())
+            .ok_or("This captured Text run is no longer available.")?;
+        if capture.direction != "decode"
+            || capture.source != source
+            || fingerprint::fingerprint(&capture.recipe)?.value
+                != fingerprint::fingerprint(recipe)?.value
+        {
+            return Err(
+                "The submitted configuration does not match the captured Text decode.".into(),
+            );
+        }
+        let result = recipes::decode(&capture.recipe, &capture.source, key, choices)?;
+        let selected = result
+            .reconstruction
+            .as_ref()
+            .and_then(|reading| reading.suggested.as_deref())
+            .ok_or("No compatible English reconstruction was found.")?;
+        let forward = recipes::encode(&capture.recipe, selected, key)?;
+        if forward.output != capture.source {
+            return Err("The selected reading does not re-encode to the complete captured ciphertext. The previous result is preserved.".into());
+        }
+        capture.result = result.clone();
+        capture.choices = choices.to_vec();
+        Ok(Evaluated {
+            run_id: self.remember(capture)?,
+            result,
+        })
     }
     pub fn save_text(
         &self,
@@ -258,7 +301,7 @@ impl Library {
             files.push((
                 Role::Candidates,
                 reading.candidates.clone(),
-                stats(&reading.candidates, control)?,
+                reading.candidates_stats.clone(),
             ));
             Some(SavedReading {
                 words: reading.info.words.clone(),
@@ -322,16 +365,9 @@ impl Library {
                     .into(),
             );
         }
-        let staged = tempfile::Builder::new()
-            .prefix("experiment-")
-            .tempdir_in(&self.root)
+        let staged = super::private_tempdir(".staging-", Some(&self.root))
             .map_err(|e| io_error("Cannot stage experiment", e))?;
-        let id = staged
-            .path()
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or("Cannot identify experiment directory.")?
-            .to_owned();
+        let id = fresh_id("experiment-")?;
         let (kind, recipe_name) = match &capture {
             Capture::Text { capture } => ("text", capture.recipe.name.clone()),
             Capture::File { capture } => ("file", capture.recipe.name.clone()),
@@ -365,23 +401,23 @@ impl Library {
                 stats: actual,
             });
         }
-        let manifest = Manifest {
-            schema_version: 1,
+        let mut manifest = Manifest {
+            schema_version: 2,
+            metadata_digest: String::new(),
             summary: summary.clone(),
             capture,
             artifacts,
         };
+        manifest.metadata_digest = metadata_digest(&manifest)?;
         let data =
             serde_json::to_vec(&manifest).map_err(|_| "Cannot serialize experiment metadata.")?;
         if u64::try_from(data.len()).map_err(|_| "Metadata length overflow.")? > MAX_METADATA {
             return Err("Experiment metadata exceeds 4 MiB.".into());
         }
-        write_new(&staged.path().join("manifest.json"), &data)?;
-        read_manifest(staged.path(), &id, control)?;
-        // The exclusively created private directory is retained only after
-        // manifest readback. Failed saves drop just this owned directory.
-        control.check()?;
-        let _ = staged.keep();
+        let metadata = stage_manifest(staged.path(), &id, &data, control)?;
+        metadata.publish(control)?;
+        let destination = entry_path(&self.root, &id)?;
+        publish_directory(staged, &destination, control)?;
         Ok(summary)
     }
 
@@ -401,7 +437,7 @@ impl Library {
         {
             return Ok(listing);
         }
-        regular_directory(&self.root)?;
+        secure_directory(&self.root)?;
         for entry in fs::read_dir(&self.root).map_err(|e| io_error("Cannot list experiments", e))? {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -443,9 +479,20 @@ impl Library {
             .operations
             .lock()
             .map_err(|_| "Experiment storage is unavailable.")?;
-        regular_directory(&self.root)?;
+        secure_directory(&self.root)?;
         let path = entry_path(&self.root, id)?;
         regular_directory(&path)?;
+        let identity = same_file::Handle::from_path(&path)
+            .map_err(|e| io_error("Cannot retain experiment directory identity", e))?;
+        read_metadata(&path, id, &path.join("manifest.json"), &Control::default())?;
+        regular_directory(&path)?;
+        let current = same_file::Handle::from_path(&path)
+            .map_err(|e| io_error("Cannot recheck experiment directory identity", e))?;
+        if identity != current {
+            return Err(
+                "The experiment directory changed before deletion. Nothing was removed.".into(),
+            );
+        }
         fs::remove_dir_all(path).map_err(|e| io_error("Cannot delete experiment", e))
     }
     pub fn open(
@@ -458,7 +505,7 @@ impl Library {
             .operations
             .lock()
             .map_err(|_| "Experiment storage is unavailable.")?;
-        regular_directory(&self.root)?;
+        secure_directory(&self.root)?;
         let path = entry_path(&self.root, id)?;
         let manifest = read_manifest(&path, id, control)?;
         match manifest.capture {
@@ -488,9 +535,7 @@ impl Library {
 }
 
 fn fresh_id(prefix: &str) -> Result<String, String> {
-    let directory = tempfile::Builder::new()
-        .prefix(prefix)
-        .tempdir()
+    let directory = super::private_tempdir(prefix, None)
         .map_err(|e| io_error("Cannot create fresh identifier", e))?;
     directory
         .path()
@@ -502,6 +547,7 @@ fn fresh_id(prefix: &str) -> Result<String, String> {
 
 pub(crate) mod commands;
 mod persistence;
+mod publication;
 mod restore;
 use persistence::*;
 use restore::restore_file;

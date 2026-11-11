@@ -57,8 +57,16 @@ fn evaluate_recipe(
     key: String,
     direction: String,
     choices: Vec<engine::WordChoice>,
+    run_id: Option<String>,
 ) -> Result<documents::experiments::Evaluated, String> {
-    library.evaluate(recipe, text, key, direction, choices)
+    if let Some(run_id) = run_id {
+        if direction != "decode" {
+            return Err("A captured reading revision requires decode direction.".into());
+        }
+        library.revise(&run_id, &recipe, &text, &key, &choices)
+    } else {
+        library.evaluate(recipe, text, key, direction, choices)
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

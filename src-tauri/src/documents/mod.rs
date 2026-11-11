@@ -68,3 +68,23 @@ mod reconstruction_tests;
 pub(crate) mod experiments;
 #[cfg(test)]
 mod experiments_tests;
+
+/// Create a content directory with owner-only access from its first instant.
+/// Windows inherits the native user profile/temp directory ACL; Unix needs an
+/// explicit mode because tempfile's directory defaults otherwise follow umask.
+pub(super) fn private_tempdir(
+    prefix: &str,
+    parent: Option<&std::path::Path>,
+) -> std::io::Result<tempfile::TempDir> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(prefix);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+    }
+    match parent {
+        Some(parent) => builder.tempdir_in(parent),
+        None => builder.tempdir(),
+    }
+}

@@ -93,9 +93,7 @@ pub(super) fn capture(
     let canonical_source = source
         .canonicalize()
         .map_err(|e| io_error("Cannot resolve source location", e))?;
-    let root = tempfile::Builder::new()
-        .prefix("document-")
-        .tempdir_in(session)
+    let root = super::private_tempdir("document-", Some(session))
         .map_err(|e| io_error("Cannot create snapshot directory", e))?;
     let id = root
         .path()

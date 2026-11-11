@@ -48,6 +48,7 @@ pub(super) struct Reading {
     pub info: ReadingInfo,
     pub artifact: Artifact,
     pub candidates: PathBuf,
+    pub candidates_stats: super::stream::ArtifactStats,
     pub choices: Vec<DocChoice>,
 }
 #[derive(Clone, Debug, Serialize)]
@@ -179,9 +180,7 @@ pub fn run_with_key(
         state.reconstructing = true;
     }
     let _admission = Admission(job.clone());
-    let root = tempfile::Builder::new()
-        .prefix("reading-")
-        .tempdir_in(job.root.path())
+    let root = super::private_tempdir("reading-", Some(job.root.path()))
         .map_err(|e| io_error("Cannot create private reading artifacts", e))?;
     let id = root
         .path()
@@ -239,12 +238,19 @@ pub fn run_with_key(
     control.begin("Re-encoding complete reading", None)?;
     verify(&job, &info.recipe, &artifact, root.path(), &key, control)?;
     control.check()?;
+    builder
+        .candidates
+        .get_ref()
+        .sync_all()
+        .map_err(|e| io_error("Cannot flush completed candidate artifact", e))?;
+    let candidates_stats = super::stream::capture_stats(&candidates, control)?;
     let info = ReadingInfo { id, job_id: job_id.into(), words: words.to_string(), note: "Speculative dictionary reading, verified by re-encoding the complete document. This does not establish original wording, spelling or formatting.".into() };
     let reading = Arc::new(Reading {
         _root: root,
         info: info.clone(),
         artifact,
         candidates,
+        candidates_stats,
         choices: choices.to_vec(),
     });
     job.state
@@ -377,9 +383,7 @@ fn verify(
     key: &str,
     control: &Control,
 ) -> Result<(), String> {
-    let scratch = tempfile::Builder::new()
-        .prefix("verification-")
-        .tempdir_in(root)
+    let scratch = super::private_tempdir("verification-", Some(root))
         .map_err(|e| io_error("Cannot create reading verification artifacts", e))?;
     let mut current = reading.clone();
     for (index, step) in recipe.steps.iter().enumerate().filter(|(_, s)| s.enabled) {
