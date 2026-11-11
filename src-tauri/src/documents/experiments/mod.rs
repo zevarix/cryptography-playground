@@ -227,18 +227,33 @@ impl Library {
             );
         }
         let result = recipes::decode(&capture.recipe, &capture.source, key, choices)?;
-        let selected = if result.exact {
-            result.output.as_str()
+        let plaintext = if result.exact {
+            Some(result.output.as_str())
         } else {
             result
                 .reconstruction
                 .as_ref()
                 .and_then(|reading| reading.suggested.as_deref())
-                .ok_or("No compatible English reconstruction was found.")?
         };
-        let forward = recipes::encode(&capture.recipe, selected, key)?;
-        if forward.output != capture.source {
-            return Err("The selected reading does not re-encode to the complete captured ciphertext. The previous result is preserved.".into());
+        if let Some(plaintext) = plaintext {
+            let forward = recipes::encode(&capture.recipe, plaintext, key)?;
+            if forward.output != capture.source {
+                return Err("The selected reading does not re-encode to the complete captured ciphertext. The previous result is preserved.".into());
+            }
+        } else {
+            // A run with only a surviving layer has no proposed plaintext to
+            // re-encode. Recompute and compare its complete layer before reuse.
+            let had_reading = capture
+                .result
+                .reconstruction
+                .as_ref()
+                .is_some_and(|reading| reading.suggested.is_some());
+            if had_reading || !capture.choices.is_empty() || !choices.is_empty() {
+                return Err("No compatible English reconstruction was found.".into());
+            }
+            if result.intermediate != capture.result.intermediate {
+                return Err("The recovered surviving layer differs from the captured run.".into());
+            }
         }
         capture.result = result.clone();
         capture.choices = choices.to_vec();

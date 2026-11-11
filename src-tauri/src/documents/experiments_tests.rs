@@ -660,6 +660,87 @@ fn restored_exact_text_decode_reruns_with_its_capture() {
     assert_ne!(repeated.run_id, run_id);
 }
 
+#[test]
+fn restored_intermediate_only_schema_one_reruns() {
+    check_intermediate_only_reruns(1);
+}
+
+#[test]
+fn restored_intermediate_only_schema_two_reruns() {
+    check_intermediate_only_reruns(2);
+}
+
+fn check_intermediate_only_reruns(schema: u32) {
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::new(root.path().join("experiments"));
+    let store = DocumentStore::new().unwrap();
+    for (source, rules, has_dictionary, key) in [
+        ("hll", vec![Rule::RemoveVowels], false, ""),
+        (
+            "zqzqzq",
+            vec![Rule::RemoveVowels, Rule::CollapseDoubles, Rule::Vigenere],
+            true,
+            "a",
+        ),
+    ] {
+        let mut recipe = recipe();
+        recipe.schema_version = schema;
+        recipe.steps = rules
+            .into_iter()
+            .map(|rule| Step {
+                enabled: true,
+                rule,
+            })
+            .collect();
+        let run = library
+            .evaluate(
+                recipe.clone(),
+                source.into(),
+                key.into(),
+                "decode".into(),
+                vec![],
+            )
+            .unwrap();
+        assert_eq!(run.result.intermediate, source);
+        assert!(!run.result.exact);
+        assert!(run.result.output.is_empty());
+        assert_eq!(run.result.reconstruction.is_some(), has_dictionary);
+        if let Some(reading) = &run.result.reconstruction {
+            assert!(reading.suggested.is_none());
+        }
+
+        let saved = library
+            .save_text(&run.run_id, "Surviving layer", &Control::default())
+            .unwrap();
+        let Opened::Text { run_id, .. } = library
+            .open(&saved.id, &store, &Control::default())
+            .unwrap()
+        else {
+            panic!("expected text")
+        };
+        if has_dictionary {
+            let changed = crate::recipes::decode(&recipe, source, "b", &[]).unwrap();
+            assert_ne!(changed.intermediate, source);
+            assert!(changed.output.is_empty());
+            assert!(library.revise(&run_id, &recipe, source, "b", &[]).is_err());
+            let pin = crate::engine::WordChoice {
+                index: 0,
+                candidate: "the".into(),
+            };
+            assert!(
+                library
+                    .revise(&run_id, &recipe, source, key, &[pin])
+                    .is_err()
+            );
+        }
+        let repeated = library.revise(&run_id, &recipe, source, key, &[]).unwrap();
+        assert_ne!(repeated.run_id, run_id);
+        assert_eq!(repeated.result.intermediate, source);
+        assert!(repeated.result.output.is_empty());
+        assert_eq!(repeated.result.reconstruction.is_some(), has_dictionary);
+    }
+}
+
 #[cfg(windows)]
 #[test]
 fn ordinary_windows_long_library_path_round_trips() {
