@@ -1,4 +1,4 @@
-"""Build unsigned native preview ZIPs; never publish a release or use signing credentials."""
+"""Build local preview ZIPs without publisher signing credentials or publication."""
 import argparse
 import base64
 import hashlib
@@ -107,8 +107,33 @@ def host_target(root):
     return next(line.removeprefix("host: ") for line in verbose.splitlines() if line.startswith("host: "))
 
 
-def unsigned(binary, bundle):
+def select_target(host, system, requested):
+    target = requested or host
+    if target == host or (system == "Darwin" and target in {
+            "x86_64-apple-darwin", "aarch64-apple-darwin"}):
+        return target
+    raise ValueError("Unsupported preview target for this host: " + target)
+
+
+def verify_preview_signing(binary, bundle, target):
     if platform.system() == "Darwin":
+        if target == "aarch64-apple-darwin":
+            compiled = bundle.parents[2] / "cryptography-playground"
+            if digest(binary) != digest(compiled):
+                raise ValueError("Bundling changed the compiler-signed executable.")
+            architecture = subprocess.check_output(["lipo", "-archs", str(binary)], text=True).strip()
+            if architecture != "arm64":
+                raise ValueError("Expected an Apple Silicon executable.")
+            result = subprocess.run(["codesign", "--display", "--verbose=4", str(compiled)],
+                                    check=True, capture_output=True, text=True)
+            details = result.stdout + result.stderr
+            if ("Signature=adhoc" not in details or "linker-signed" not in details
+                    or "Authority=" in details or "TeamIdentifier=not set" not in details):
+                raise ValueError("Expected only a compiler-generated ad-hoc signature.")
+            # Linker signatures seal executable pages, not bundle resources. The
+            # byte-identical standalone executable is the correct verification input.
+            subprocess.run(["codesign", "--verify", "--strict", "--verbose=2", str(compiled)], check=True)
+            return "linker-ad-hoc"
         result = subprocess.run(["codesign", "--display", "--verbose=2", str(bundle)], capture_output=True, text=True)
         if result.returncode == 0 or "not signed at all" not in result.stderr:
             raise ValueError("Expected a completely unsigned macOS app bundle.")
@@ -117,9 +142,10 @@ def unsigned(binary, bundle):
         script = "$s=Get-AuthenticodeSignature -LiteralPath '" + quoted + "';if($s.Status.ToString() -ne 'NotSigned'){exit 1}"
         encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
         subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], check=True)
+    return "unsigned"
 
 
-def build(root, output, label):
+def build(root, output, label, requested_target=None):
     if platform.system() not in {"Darwin", "Windows"}:
         raise ValueError("Use native Windows/macOS for these preview ZIPs; Linux needs its own distribution bundle.")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+", label):
@@ -130,9 +156,11 @@ def build(root, output, label):
     app_config = json.loads((root / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
     if label.split("-preview.")[0] != app_config["version"]:
         raise ValueError("Preview label must match the application version.")
-    target = host_target(root)
+    target = select_target(host_target(root), platform.system(), requested_target)
     system = "macos" if platform.system() == "Darwin" else "windows"
-    name = "cryptography-playground-" + label + "-" + system + "-" + target.split("-")[0] + "-unsigned"
+    apple_silicon = target == "aarch64-apple-darwin"
+    status = "unnotarized" if apple_silicon else "unsigned"
+    name = "cryptography-playground-" + label + "-" + system + "-" + target.split("-")[0] + "-" + status
     output.mkdir(parents=True, exist_ok=False)
     checkout = root
     root = output / "source"
@@ -161,11 +189,17 @@ def build(root, output, label):
             flags.append("--remap-path-prefix=" + prefix + "=" + replacement)
     environment["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(flags)
     override = output / "tauri-preview.json"
-    override.write_text(json.dumps({"bundle": {"resources": {
+    bundle_config = {"resources": {
         os.path.relpath(notices, root / "src-tauri").replace("\\", "/"): "notices"
-    }}}))
+    }}
+    if apple_silicon:
+        bundle_config["macOS"] = {"minimumSystemVersion": "11.0"}
+        environment["MACOSX_DEPLOYMENT_TARGET"] = "11.0"
+    override.write_text(json.dumps({"bundle": bundle_config}))
     command = [npm, "run", "tauri", "build", "--", "--target", target, "--config", str(override), "--no-sign"]
     command += ["--bundles", "app"] if system == "macos" else ["--no-bundle"]
+    if apple_silicon:
+        command += ["--no-binary-patching"]
     subprocess.run([*command, "--", "--locked"], cwd=root, env=environment, check=True)
     target_root = Path(metadata["target_directory"])
     release = target_root / target / "release"
@@ -186,13 +220,13 @@ def build(root, output, label):
         shutil.copytree(notices, stage / "notices")
         bundled_notice = "notices"
     check_binary_paths(binary, [str(Path.home()), str(checkout), checkout.as_posix(), str(root), root.as_posix()])
-    unsigned(binary, bundle)
+    signing = verify_preview_signing(binary, bundle, target)
     if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip() != source or subprocess.check_output(
         ["git", "status", "--porcelain", "--untracked-files=no"], cwd=checkout, text=True).strip():
         raise ValueError("Source changed during the preview build.")
     shutil.copyfile(root / "LICENSE", stage / "LICENSE")
     readme = (
-        "Cryptography Playground " + label + " — unsigned preview\n\n"
+        "Cryptography Playground " + label + " — " + status + " preview\n\n"
         "These experimental and historical ciphers are for puzzles and learning, not sensitive information.\n"
         "Platform: " + target + "\n"
         "Source: https://github.com/zevarix/cryptography-playground/tree/" + source + "\n\n"
@@ -200,7 +234,12 @@ def build(root, output, label):
            "Requires Microsoft Edge WebView2 Runtime: https://developer.microsoft.com/microsoft-edge/webview2/\n"
            if system == "windows" else
            "Extract the archive, then move Cryptography Playground.app to Applications if desired.\n"
-           "This Intel app is unsigned and unnotarized. Apple's per-app opening guidance:\n"
+           + ("This Apple Silicon app retains its compiler-generated ad-hoc executable signature.\n"
+              "No publisher signature, bundle resource seal or notarization is provided.\n"
+              "Apple Silicon runtime testing is pending; this is an experimental test download.\n"
+              "The recorded minimum macOS version is 11.0; compatibility has not been verified.\n"
+              if apple_silicon else "This Intel app is unsigned and unnotarized.\n")
+           + "Apple's per-app opening guidance:\n"
            "https://support.apple.com/en-us/102445\n")
         + "\nNotices and corresponding source: " + bundled_notice + "/THIRD-PARTY-NOTICES.txt\n"
         "Upstream notice qualifications: " + bundled_notice + "/project/packaging/UPSTREAM-NOTICES.md\n"
@@ -208,10 +247,14 @@ def build(root, output, label):
     )
     (stage / "README.txt").write_text(readme, encoding="utf-8")
     information = {"sourceCommit": source, "sourceExportSHA256": exported_hash, "preview": label, "appVersion": app_config["version"],
-                   "target": target, "signing": "unsigned", "binarySHA256": digest(binary),
+                   "target": target, "signing": signing, "binarySHA256": digest(binary),
                    "rust": index["rust"]["version"],
                    "node": subprocess.check_output(["node", "--version"], cwd=root, text=True).strip(),
                    "lockfiles": {p: digest(root / p) for p in ["src-tauri/Cargo.lock", "package-lock.json"]}}
+    if apple_silicon:
+        information.update({"runtimeAcceptance": "pending: Apple Silicon hardware unavailable",
+                            "minimumMacOS": "11.0", "publisherSigned": False,
+                            "bundleResourceSealing": "none", "notarized": False})
     write_manifest(stage, information)
     verify_payload(stage)
     if system == "macos":
@@ -229,12 +272,13 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--label", default="0.1.0-preview.1")
     parser.add_argument("--verify", type=Path)
+    parser.add_argument("--target", help="Native target by default; macOS also permits Intel or Apple Silicon cross-compilation")
     args = parser.parse_args()
     if args.verify:
         verify_payload(args.verify)
         print("Payload matches its manifest.")
     elif args.output:
-        build(Path(__file__).resolve().parents[1], args.output.resolve(), args.label)
+        build(Path(__file__).resolve().parents[1], args.output.resolve(), args.label, args.target)
     else:
         parser.error("--output or --verify is required")
 

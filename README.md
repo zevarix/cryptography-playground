@@ -6,15 +6,17 @@ Built with Rust, Tauri 2, React, and TypeScript. **These experimental and histor
 
 ## Download the preview
 
+[Experimental Preview 2 for Apple Silicon](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.2) includes the saved experiment library. This unnotarized test download has passed compilation and package-integrity checks; opening and using it on Apple Silicon hardware remains unverified.
+
 [Download Preview 1 for Windows, Intel Mac, or Ubuntu](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1), with platform instructions and SHA-256 checksums.
 
 - **Windows x64:** extract the portable ZIP with its notices directory. Requires Microsoft Evergreen WebView2 Runtime.
 - **Intel macOS:** extract the ZIP containing the unsigned, unnotarized app. Tested on macOS 15.8.1; follow the release's per-app opening guidance if needed.
 - **Ubuntu 24.04 x64:** install the unsigned Debian package using the release instructions. GTK/WebKit dependencies are supplied by apt.
 
-Apple Silicon, older macOS versions, and other Linux distributions or architectures have not been verified. These are unsigned preview builds; SHA-256 checksums verify download integrity, not publisher identity.
+Apple Silicon runtime behavior, older macOS versions, and other Linux distributions or architectures have not been verified. Preview 1 is unsigned. Preview 2 retains only the compiler's ad-hoc executable signature; it has no publisher signature or notarization. SHA-256 checksums verify download integrity, not publisher identity.
 
-Preview 1 predates the saved experiment library described below. Build from current source to use that feature.
+Preview 1 predates the saved experiment library described below. The Apple Silicon Preview 2 and current source builds include that feature.
 
 ## What you can do
 

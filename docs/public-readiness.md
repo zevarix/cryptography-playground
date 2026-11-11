@@ -8,6 +8,8 @@ The [source repository](https://github.com/zevarix/cryptography-playground) is p
 
 The Mac app is unnotarized. Checksums establish archive integrity, not publisher identity. Preparation and verification are documented in [Unsigned preview packages](preview-packages.md).
 
+[Preview 2](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.2) is a separate experimental Apple Silicon prerelease with the local saved experiment library. The owner approved publication on 2026-11-11 with the explicit limitation that Apple Silicon hardware testing remains pending. Its compiler-generated ad-hoc executable signature is retained; there is no publisher signature, app-bundle resource seal or notarization. The package pins its exact source and retained notices and provides a SHA-256 sidecar and payload manifest. This is not a verified platform-support claim, and it does not replace Preview 1's tested Windows, Intel Mac or Ubuntu packages.
+
 ## Before each distribution
 
 For a new or changed installer or executable:

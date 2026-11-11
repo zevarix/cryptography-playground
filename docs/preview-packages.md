@@ -1,6 +1,6 @@
 # Unsigned preview packages
 
-The preview helpers create portable ZIPs on native Windows or macOS and a [Debian package on native Linux](#linux-debian-preview). They do not publish a release, sign an application, or notarize a Mac app.
+The preview helpers create portable ZIPs on Windows or macOS and a [Debian package on native Linux](#linux-debian-preview). The macOS helper also cross-compiles between Intel and Apple Silicon. They do not publish a release, use publisher signing credentials, or notarize a Mac app.
 
 To try the application, [download the published Preview 1 packages](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1). The commands below are for preparing new packages from source.
 
@@ -12,7 +12,7 @@ python3 -m tools.preview_package --output .task-files/preview-1 --label 0.1.0-pr
 
 On Windows, use `python` instead of `python3`. Choose a new output directory for each attempt; existing archives are never overwritten.
 
-The helper exports only the committed Git objects into a fresh source snapshot; local public assets, ignored environment files and other untracked inputs are excluded. It installs the locked npm dependencies, inspects Cargo's target-filtered normal dependency closure, assembles notices, remaps compiler source paths, and builds with Tauri's explicit `--no-sign` option. Existing custom Rust flags are rejected so they cannot silently change the build. The archive name records the native target's architecture; the application version and preview label are recorded separately in its manifest.
+The helper exports only the committed Git objects into a fresh source snapshot; local public assets, ignored environment files and other untracked inputs are excluded. It installs the locked npm dependencies, inspects Cargo's target-filtered normal dependency closure, assembles notices, remaps compiler source paths, and builds with Tauri's explicit `--no-sign` option. Existing custom Rust flags are rejected so they cannot silently change the build. The archive name records the selected target's architecture; the application version and preview label are recorded separately in its manifest.
 
 Each ZIP contains the app, an opening guide, the project license, a file/hash manifest, and notices. The Mac app carries notices inside `Contents/Resources/notices`, so they remain with it when moved. On Windows, keep the extracted executable and its notices directory together.
 
@@ -41,7 +41,22 @@ Launch the extracted application on its advertised platform. Check startup, rend
 
 Windows requires Microsoft's [Evergreen WebView2 Runtime](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution). The ZIP does not install system runtimes. Actual PE imports determine any additional redistribution requirement.
 
-The Mac app is unsigned and unnotarized. Apple's [per-app opening guidance](https://support.apple.com/en-us/102445) explains the operating-system approval path. Package verification does not bypass Gatekeeper or change system-wide security settings.
+The Intel Mac app is unsigned and unnotarized; Apple Silicon signing details are below. Apple's [per-app opening guidance](https://support.apple.com/en-us/102445) explains the operating-system approval path. Package verification does not bypass Gatekeeper or change system-wide security settings.
+
+## Apple Silicon experimental preview
+
+On an Intel or Apple Silicon Mac with the existing build prerequisites:
+
+```sh
+rustup target add aarch64-apple-darwin
+python3 -m tools.preview_package --output .task-files/apple-silicon-preview-2 --label 0.1.0-preview.2 --target aarch64-apple-darwin
+```
+
+This creates an `aarch64` ZIP and checksum. It uses a macOS 11.0 deployment target and retains the compiler-generated ad-hoc executable signature required for ARM code. Tauri binary patching is disabled to preserve those signed bytes. The helper checks the bundled executable's ARM64 architecture, equality with the standalone compiler output, and the standalone output's native signature verification. The linker signature does not seal the app bundle's resources or identify a publisher; the package manifest supplies a separate file/hash inventory. No publisher signing credentials or notarization are used.
+
+The README and manifest mark Apple Silicon runtime acceptance as pending. Cross-compilation and archive checks do not verify startup, rendering, file operations or saved experiments on the target hardware. The recorded macOS 11.0 minimum is a build setting, not tested compatibility with that OS version. Preview 2 is an experimental Apple Silicon download, separately approved by the owner; Preview 1 retains the existing tested platform downloads.
+
+`--target` defaults to the compiler's native target. macOS additionally accepts `x86_64-apple-darwin` or `aarch64-apple-darwin`; other cross-platform requests are rejected. Existing Intel and Windows preview behavior is retained.
 
 Public distribution is a separate owner decision under [AGENTS.md](../AGENTS.md). Prepare archives and release notes for review before publishing; retain exact-source acceptance and the [binary-release checklist](public-readiness.md).
 
