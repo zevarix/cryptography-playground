@@ -2,7 +2,7 @@
 
 The preview helper creates portable ZIPs on native Windows or macOS. It does not publish a release, sign an application, or notarize a Mac app.
 
-Install the normal build prerequisites from the README and Python 3.11 or newer. Commit the source you intend to package, then run from the repository root:
+Install the normal build prerequisites from the README and Python 3.12 or newer. Commit the source you intend to package, then run from the repository root:
 
 ```sh
 python3 -m tools.preview_package --output .task-files/preview-1 --label 0.1.0-preview.1
@@ -10,7 +10,7 @@ python3 -m tools.preview_package --output .task-files/preview-1 --label 0.1.0-pr
 
 On Windows, use `python` instead of `python3`. Choose a new output directory for each attempt; existing archives are never overwritten.
 
-The helper installs the locked npm dependencies, inspects Cargo's target-filtered normal dependency closure, assembles notices, remaps compiler source paths, and builds with Tauri's explicit `--no-sign` option. Existing custom Rust flags are rejected so they cannot silently change the build. The archive name records the native target's architecture; the application version and preview label are recorded separately in its manifest.
+The helper exports only the committed Git objects into a fresh source snapshot; local public assets, ignored environment files and other untracked inputs are excluded. It installs the locked npm dependencies, inspects Cargo's target-filtered normal dependency closure, assembles notices, remaps compiler source paths, and builds with Tauri's explicit `--no-sign` option. Existing custom Rust flags are rejected so they cannot silently change the build. The archive name records the native target's architecture; the application version and preview label are recorded separately in its manifest.
 
 Each ZIP contains the app, an opening guide, the project license, a file/hash manifest, and notices. The Mac app carries notices inside `Contents/Resources/notices`, so they remain with it when moved. On Windows, keep the extracted executable and its notices directory together.
 

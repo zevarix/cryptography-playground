@@ -10,8 +10,20 @@ import re
 import shutil
 import stat
 import subprocess
+import tarfile
 import zipfile
 from tools.preview_notices import assemble, digest
+
+
+def export_source(checkout, revision, destination):
+    """Export tracked Git objects, excluding local/untracked/ignored build inputs."""
+    destination.mkdir()
+    archive = destination.with_name(destination.name + ".tar")
+    with archive.open("xb") as stream:
+        subprocess.run(["git", "archive", "--format=tar", revision], cwd=checkout, stdout=stream, check=True)
+    with tarfile.open(archive) as source:
+        source.extractall(destination, filter="data")
+    return digest(archive)
 
 
 def check_binary_paths(path, prefixes):
@@ -113,21 +125,27 @@ def build(root, output, label):
     system = "macos" if platform.system() == "Darwin" else "windows"
     name = "cryptography-playground-" + label + "-" + system + "-" + target.split("-")[0] + "-unsigned"
     output.mkdir(parents=True, exist_ok=False)
+    checkout = root
+    root = output / "source"
+    exported_hash = export_source(checkout, source, root)
+    environment = os.environ.copy()
+    if environment.get("RUSTFLAGS") or environment.get("CARGO_ENCODED_RUSTFLAGS"):
+        raise ValueError("Use a clean build environment without pre-existing Rust flags.")
+    environment.setdefault("CARGO_TARGET_DIR", str(checkout / "src-tauri/target"))
     npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
     if not npm:
         raise ValueError("npm is required.")
     subprocess.run([npm, "ci"], cwd=root, check=True)
     metadata = json.loads(subprocess.check_output(
         ["cargo", "metadata", "--manifest-path", "src-tauri/Cargo.toml", "--format-version", "1",
-         "--locked", "--filter-platform", target, "--features", "tauri/custom-protocol"], cwd=root))
+         "--locked", "--filter-platform", target, "--features", "tauri/custom-protocol"], cwd=root, env=environment))
     notices = output / "notices"
     index = assemble(root, metadata, notices, source)
-    environment = os.environ.copy()
-    if environment.get("RUSTFLAGS") or environment.get("CARGO_ENCODED_RUSTFLAGS"):
-        raise ValueError("Use a clean build environment without pre-existing Rust flags.")
     pairs = [(Path.home(), "/build/user"),
              (Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")), "/build/cargo"),
-             (root, "/src/cryptography-playground")]
+             (checkout, "/src/cryptography-playground")]
+    if not root.is_relative_to(checkout):
+        pairs.append((root, "/src/cryptography-playground"))
     flags = []
     for path, replacement in pairs:
         for prefix in dict.fromkeys([str(path), path.as_posix()]):
@@ -140,7 +158,7 @@ def build(root, output, label):
     command = [npm, "run", "tauri", "build", "--", "--target", target, "--config", str(override), "--no-sign"]
     command += ["--bundles", "app"] if system == "macos" else ["--no-bundle"]
     subprocess.run([*command, "--", "--locked"], cwd=root, env=environment, check=True)
-    target_root = Path(environment.get("CARGO_TARGET_DIR", root / "src-tauri/target"))
+    target_root = Path(metadata["target_directory"])
     release = target_root / target / "release"
     stage = output / name
     stage.mkdir()
@@ -158,10 +176,10 @@ def build(root, output, label):
         shutil.copy2(binary, stage / binary.name)
         shutil.copytree(notices, stage / "notices")
         bundled_notice = "notices"
-    check_binary_paths(binary, [str(Path.home()), str(root), root.as_posix()])
+    check_binary_paths(binary, [str(Path.home()), str(checkout), checkout.as_posix(), str(root), root.as_posix()])
     unsigned(binary, bundle)
-    if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip() != source or subprocess.check_output(
-        ["git", "status", "--porcelain", "--untracked-files=no"], cwd=root, text=True).strip():
+    if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout, text=True).strip() != source or subprocess.check_output(
+        ["git", "status", "--porcelain", "--untracked-files=no"], cwd=checkout, text=True).strip():
         raise ValueError("Source changed during the preview build.")
     shutil.copyfile(root / "LICENSE", stage / "LICENSE")
     readme = (
@@ -180,7 +198,7 @@ def build(root, output, label):
         "Verify archive SHA-256 with its .sha256 file. Checksums detect corruption, not publisher identity.\n"
     )
     (stage / "README.txt").write_text(readme, encoding="utf-8")
-    information = {"sourceCommit": source, "preview": label, "appVersion": app_config["version"],
+    information = {"sourceCommit": source, "sourceExportSHA256": exported_hash, "preview": label, "appVersion": app_config["version"],
                    "target": target, "signing": "unsigned", "binarySHA256": digest(binary),
                    "rust": index["rust"]["version"],
                    "node": subprocess.check_output(["node", "--version"], cwd=root, text=True).strip(),

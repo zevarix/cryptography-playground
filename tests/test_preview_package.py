@@ -1,14 +1,62 @@
 """Release helpers must preserve notice bytes and reject unsafe/incomplete packages."""
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
 from tools.preview_notices import runtime_packages, license_files, checked_source_archive
-from tools.preview_package import check_binary_paths, write_archive, verify_payload, write_manifest
+from tools.preview_package import check_binary_paths, write_archive, verify_payload, write_manifest, export_source
 
 
 class PreviewTests(unittest.TestCase):
+    def git(self, directory, *args):
+        return subprocess.check_output(["git", "-C", str(directory), *args],
+                                       stderr=subprocess.DEVNULL)
+
+    def commit_fixture(self, directory):
+        self.git(directory, "add", ".")
+        self.git(directory, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "-qm", "fixture")
+
+    def test_upstream_notices_are_verbatim_in_windows_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            repo = base / "repo"
+            repo.mkdir()
+            self.git(repo, "init", "-q")
+            (repo / ".gitattributes").write_bytes(
+                (Path(__file__).resolve().parents[1] / ".gitattributes").read_bytes())
+            notice = repo / "licenses/upstream/notice.txt"
+            notice.parent.mkdir(parents=True)
+            original = b"Copyright fixture\nPermission notice\n"
+            notice.write_bytes(original)
+            self.commit_fixture(repo)
+            clone = base / "clone"
+            self.git(repo, "clone", "-q", "--config", "core.autocrlf=true", str(repo), str(clone))
+            self.assertEqual((clone / "licenses/upstream/notice.txt").read_bytes(), original)
+
+    def test_snapshot_excludes_untracked_and_ignored_compiled_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            repo = base / "repo"
+            (repo / "public").mkdir(parents=True)
+            self.git(repo, "init", "-q")
+            (repo / ".gitignore").write_text("*.log\n.env\n", encoding="utf-8")
+            (repo / "public/tracked.txt").write_text("tracked", encoding="utf-8")
+            self.commit_fixture(repo)
+            revision = self.git(repo, "rev-parse", "HEAD").decode().strip()
+            (repo / "public/private-notes.txt").write_text("private", encoding="utf-8")
+            (repo / "public/ignored.log").write_text("ignored", encoding="utf-8")
+            (repo / ".env").write_text("VITE_EXAMPLE=local", encoding="utf-8")
+            self.assertEqual(self.git(repo, "status", "--porcelain", "--untracked-files=no"), b"")
+            destination = base / "snapshot"
+            export_source(repo, revision, destination)
+            self.assertEqual((destination / "public/tracked.txt").read_text(), "tracked")
+            self.assertFalse((destination / "public/private-notes.txt").exists())
+            self.assertFalse((destination / "public/ignored.log").exists())
+            self.assertFalse((destination / ".env").exists())
+
     def test_runtime_closure_excludes_build_dev_and_proc_macro(self):
         def p(name, kind="lib"):
             return {"id": name, "name": name, "version": "1", "targets": [{"kind": [kind]}]}
