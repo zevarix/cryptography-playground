@@ -50,3 +50,23 @@ python3 -m unittest discover -s tests -p "test_preview*.py"
 ```
 
 These standard-library-only tests run in the existing application CI job when application checks apply. Documentation-only changes keep the inexpensive classifier path.
+
+## Linux Debian preview
+
+On native Linux, prepare a Debian package using the same committed-source and notice checks:
+
+```sh
+python3 -m tools.preview_linux --output .task-files/linux-preview --label 0.1.0-preview.1
+```
+
+This produces an unsigned `.deb`, its SHA-256 sidecar and a separate `.deb.manifest.json` inventory. The Debian preview version sorts before the stable application version. GTK and WebKit remain system dependencies; the package does not copy their shared libraries into the distribution. Application/dependency/data notices and selected corresponding sources are installed under `/usr/lib/cryptography-playground/notices`.
+
+Compare the checksum before installing, then use `sudo apt install ./cryptography-playground-0.1.0-preview.1-linux-x86_64-unsigned.deb`. Package dependencies are resolved by apt. The initial acceptance target is Ubuntu 24.04 x64; other distributions and architectures need their own runtime acceptance.
+
+Verify the package against its separate payload manifest on a system with `dpkg-deb` and `ar`:
+
+```sh
+python3 -m tools.preview_linux --verify-deb package.deb --manifest package.deb.manifest.json
+```
+
+The existing validation workflow also offers a manual `linux_preview` input. When enabled, its Ubuntu job builds a release package, verifies it, installs it, and opens the installed application in an isolated X11 session. The resulting package/checksum/manifest are uploaded as a workflow artifact for review. Ordinary PR/main validation keeps its existing debug build/window check and creates no installer artifact. Neither path publishes a GitHub release.

@@ -25,3 +25,5 @@ Before distributing installers or executables, assemble notices for the exact re
 Remaining binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md).
 
 Unsigned preview ZIPs are prepared with [the preview packaging helper](docs/preview-packages.md), which retains exact resolved dependency notices, standard-library terms, source archives and bundled-data/palette attribution. See [upstream notice provenance and qualifications](packaging/UPSTREAM-NOTICES.md) for omissions in published dependency packages and the evidence retained with previews.
+
+Linux Debian previews retain the same application/data notices and target-specific Rust/npm terms. GTK/WebKit are supplied by the distribution package manager; they are not copied into the preview. See [Linux packaging and verification](docs/preview-packages.md#linux-debian-preview).

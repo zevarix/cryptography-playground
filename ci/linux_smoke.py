@@ -1,5 +1,6 @@
 """Check that the task-owned native Linux application opens a window."""
 
+import argparse
 from pathlib import Path
 import os
 import re
@@ -7,7 +8,9 @@ import subprocess
 import tempfile
 import time
 
-binary = Path("src-tauri/target/debug/cryptography-playground").resolve()
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--binary", type=Path, default=Path("src-tauri/target/debug/cryptography-playground"))
+binary = parser.parse_args().binary.resolve()
 with tempfile.TemporaryDirectory(prefix="playground-linux-smoke-") as temporary:
     root = Path(temporary)
     environment = os.environ.copy()
