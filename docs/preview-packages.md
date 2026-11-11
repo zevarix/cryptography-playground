@@ -1,6 +1,8 @@
 # Unsigned preview packages
 
-The preview helper creates portable ZIPs on native Windows or macOS. It does not publish a release, sign an application, or notarize a Mac app.
+The preview helpers create portable ZIPs on native Windows or macOS and a [Debian package on native Linux](#linux-debian-preview). They do not publish a release, sign an application, or notarize a Mac app.
+
+To try the application, [download the published Preview 1 packages](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1). The commands below are for preparing new packages from source.
 
 Install the normal build prerequisites from the README and Python 3.12 or newer. Commit the source you intend to package, then run from the repository root:
 

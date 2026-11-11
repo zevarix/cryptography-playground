@@ -4,6 +4,16 @@ A desktop notebook for composing toy ciphers, inspecting each transformation, an
 
 Built with Rust, Tauri 2, React, and TypeScript. **These experimental and historical ciphers are for puzzles and learning, not for protecting sensitive information.**
 
+## Download the preview
+
+[Download Preview 1 for Windows, Intel Mac, or Ubuntu](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1), with platform instructions and SHA-256 checksums.
+
+- **Windows x64:** extract the portable ZIP with its notices directory. Requires Microsoft Evergreen WebView2 Runtime.
+- **Intel macOS:** extract the ZIP containing the unsigned, unnotarized app. Tested on macOS 15.8.1; follow the release's per-app opening guidance if needed.
+- **Ubuntu 24.04 x64:** install the unsigned Debian package using the release instructions. GTK/WebKit dependencies are supplied by apt.
+
+Apple Silicon, older macOS versions, and other Linux distributions or architectures have not been verified. These are unsigned preview builds; SHA-256 checksums verify download integrity, not publisher identity.
+
 ## What you can do
 
 - Build recipes from configurable rules, enable or reorder steps, and inspect intermediate text.
@@ -80,7 +90,7 @@ npm run tauri build -- --no-bundle --no-sign -- --locked
 
 The desktop executable is written under `src-tauri/target/release/`. The frontend build alone is not the native application. Native testing has covered Windows and Intel macOS. Linux CI builds and smoke-tests the application on Ubuntu 24.04 x64. Apple Silicon has not been verified.
 
-[Build unsigned preview ZIPs](docs/preview-packages.md) with dependency notices, source manifests and SHA-256 checksums.
+[Build unsigned preview ZIPs or a Linux Debian package](docs/preview-packages.md) with dependency notices, source manifests and SHA-256 checksums.
 
 ## Checks
 
