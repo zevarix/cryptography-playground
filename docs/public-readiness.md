@@ -6,7 +6,7 @@ Before distributing installers or executables:
 
 - Include notices for the exact resolved runtime dependencies, bundled data, and adapted palettes. See [THIRD_PARTY.md](../THIRD_PARTY.md).
 - Test the release executable on each advertised platform. Windows and Intel macOS development testing does not establish Linux or Apple Silicon support.
-- Review release configuration and the renderer/native command boundary, including the currently unset CSP.
+- Review release configuration and the renderer/native command boundary, including the [configured content security policy](content-security-policy.md).
 - Decide distribution channels and signing/notarization requirements.
 
 ## What CI covers

@@ -20,7 +20,36 @@
                                 }
                             ],
                 "security":  {
-                                 "csp":  null
+                                 "csp": {
+                                   "default-src": "'none'",
+                                   "script-src": "'self'",
+                                   "script-src-attr": "'none'",
+                                   "style-src": "'self'",
+                                   "style-src-attr": "'none'",
+                                   "img-src": "'self'",
+                                   "font-src": "'none'",
+                                   "connect-src": "ipc: http://ipc.localhost",
+                                   "object-src": "'none'",
+                                   "base-uri": "'none'",
+                                   "form-action": "'none'",
+                                   "frame-src": "'none'",
+                                   "worker-src": "'none'"
+                                 },
+                                 "devCsp": {
+                                   "default-src": "'none'",
+                                   "script-src": "'self' 'unsafe-inline'",
+                                   "script-src-attr": "'none'",
+                                   "style-src": "'self' 'unsafe-inline'",
+                                   "style-src-attr": "'none'",
+                                   "img-src": "'self'",
+                                   "font-src": "'none'",
+                                   "connect-src": "'self' ipc: http://ipc.localhost ws://localhost:1420 ws://127.0.0.1:1420 ws://localhost:1421 ws://127.0.0.1:1421",
+                                   "object-src": "'none'",
+                                   "base-uri": "'none'",
+                                   "form-action": "'none'",
+                                   "frame-src": "'none'",
+                                   "worker-src": "'none'"
+                                 }
                              }
             },
     "bundle":  {
