@@ -15,7 +15,7 @@ Before submitting:
 - Run `npm run test:gui` with `CHROME_EXECUTABLE` set when changing interface behavior. Its mocked bridge is not native acceptance.
 - For CI scope changes, run `python -m unittest discover -s ci -p "test_*.py"` and explain which changes run or skip expensive checks. Unknown paths must run the checks.
 - Test meaningful behavior and failure cases. Preserve recipe outputs unless a deliberate, versioned compatibility decision changes them.
-- Retain data provenance and third-party notices. Do not commit real passphrases, private experiment text, machine paths, credentials, or generated screenshots.
+- Retain data provenance and third-party notices. Do not commit real passphrases, private experiment text, machine paths, credentials, or automated test screenshots. Curated images in `docs/showcase/` may document the native app using bundled recipes and synthetic text; inspect the full image and strip metadata before committing.
 
 For an application change, report which platforms you tested and which remain untested. Maintainers validate the accepted revision on Windows and macOS and update their local test builds as described in AGENTS.md.
 
