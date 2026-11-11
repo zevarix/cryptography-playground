@@ -17,7 +17,7 @@ export type Rule =
 
 export type Step = { enabled: boolean; rule: Rule };
 export type Recipe = {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   name: string;
   description: string;
@@ -26,7 +26,7 @@ export type Recipe = {
 export type RuleKind = Rule["type"];
 export type RecipeFingerprint = {
   algorithm: "SHA-256";
-  version: 1;
+  version: 1 | 2;
   value: string;
   display: string;
 };
@@ -67,7 +67,7 @@ export const RULE_CATALOG: Array<{
   { type: "vigenere", label: "Vigenere", detail: "Repeating-key substitution using the workbench passphrase.", lossy: false },
   { type: "beaufort", label: "Beaufort", detail: "Reciprocal repeating-key substitution using the workbench passphrase.", lossy: false },
   { type: "affine", label: "Affine", detail: "Alphabet transformation (a × letter + b) mod 26.", lossy: false },
-  { type: "rail_fence", label: "Rail Fence", detail: "Zigzag transposition of every ASCII character, including punctuation.", lossy: false },
+  { type: "rail_fence", label: "Rail Fence", detail: "Zigzag transposition of the whole message, including spaces and punctuation.", lossy: false },
   { type: "derived_caesar", label: "Derived Caesar shift", detail: "Deterministic Caesar shift (0-25) derived from this recipe's rules, rule position, and your passphrase.", lossy: false },
   { type: "derived_rail_fence", label: "Derived Rail Fence", detail: "Deterministic Rail Fence count (2-16) derived from this recipe's rules, rule position, and your passphrase.", lossy: false },
 ];

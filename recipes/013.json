@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin-013",
+  "name": "UTF-8 document",
+  "description": "A reversible Caesar shift and three-rail transposition for UTF-8 text and Markdown files.",
+  "steps": [
+    { "enabled": true, "rule": { "type": "caesar", "shift": 3 } },
+    { "enabled": true, "rule": { "type": "rail_fence", "rails": 3 } }
+  ]
+}

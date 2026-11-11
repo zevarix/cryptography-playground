@@ -12,7 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifacts = resolve(root, "test-artifacts");
 await mkdir(artifacts, { recursive: true });
 const recipeFixtures = await Promise.all(
-  Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(3, "0")).map(async number =>
+  Array.from({ length: 14 }, (_, i) => String(i + 1).padStart(3, "0")).map(async number =>
     JSON.parse(await readFile(resolve(root, "recipes", number + ".json"), "utf8"))
   )
 );
@@ -44,6 +44,7 @@ try {
           const bytes = new TextEncoder().encode(content);
           const digest = await crypto.subtle.digest("SHA-256", bytes);
           const value = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+          window.__testLastFingerprintRecipe = args.recipe.name;
           return { algorithm: "SHA-256", version: 1, value, display: "CRYPT-R1-" + value.slice(0,16) };
         }
         if (command === "list_saved_recipes") return saved;
@@ -112,10 +113,10 @@ try {
 
   await page.goto("http://127.0.0.1:15423/", { waitUntil: "networkidle" });
   assert.equal(await page.title(), "Cryptography Playground");
-  assert.match(await page.locator("h1").innerText(), /Experiment: Phonetic Rotation/);
+  assert.match(await page.locator("h1:visible").innerText(), /Experiment: Phonetic Rotation/);
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   const pngRecipes = resolve(artifacts, "recipe-library-and-builder.png");
-  assert.equal(await page.locator(".recipe-library-entry").count(), 12);
+  assert.equal(await page.locator(".recipe-library-entry").count(), 14);
   await page.waitForFunction(() => document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent?.startsWith("CRYPT-R1-"));
   await page.screenshot({ path: pngRecipes, fullPage: true, animations: "disabled" });
   const initialFingerprint = await page.locator('[data-testid="recipe-fingerprint"]').innerText();
@@ -133,8 +134,14 @@ try {
   assert.notEqual(derivedFingerprint, initialFingerprint);
   const pngDerived = resolve(artifacts, "recipe-derived-parameters-editor.png");
   await page.screenshot({ path: pngDerived, fullPage: true, animations: "disabled" });
+  const copiedName = await page.locator("#recipe-name").inputValue() + " (copy)";
   await page.getByRole("button", { name: "Duplicate", exact: true }).click();
-  await page.waitForFunction((expected) => document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent === expected, derivedFingerprint);
+  // The old and copied recipes have the same fingerprint. Wait for the
+  // copy's completed request so the old value cannot satisfy this check.
+  await page.waitForFunction(({ expected, name }) =>
+    window.__testLastFingerprintRecipe === name &&
+    document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent === expected,
+  { expected: derivedFingerprint, name: copiedName });
   assert.equal(await page.locator('[data-testid="recipe-fingerprint"]').innerText(), derivedFingerprint, "Metadata/ID-only copy should preserve fingerprint");
   await page.locator("#rule-0").selectOption("caesar");
   await page.waitForFunction((previous) =>
@@ -154,7 +161,7 @@ try {
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   await page.getByRole("button", { name: /Vigenere/ }).click();
   assert.equal(await page.locator("#rule-0").inputValue(), "vigenere");
-  assert.equal(await page.locator("#rule-0 optgroup[label='Classical substitution (cifers)']").count(), 1);
+  assert.equal(await page.locator("#rule-0 optgroup[label='Classical substitution (ciphers)']").count(), 1);
   await page.getByRole("button", { name: "Use in workbench" }).click();
   await page.locator("#passphrase").fill("");
   assert.equal(await page.getByRole("button", { name: /Encode/ }).isDisabled(), true);
@@ -216,7 +223,7 @@ try {
   await page.getByRole("button", { name: "Save recipe" }).click();
   assert.match(await page.locator(".recipe-save-state").innerText(), /Saved locally on this computer/);
   await page.reload({ waitUntil: "networkidle" });
-  assert.match(await page.locator("h1").innerText(), /Experiment: My Custom Cipher/);
+  assert.match(await page.locator("h1:visible").innerText(), /Experiment: My Custom Cipher/);
   assert.match(await page.locator(".recipe-save-state").innerText(), /Saved locally on this computer/);
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   assert.ok(await page.getByRole("button", { name: /My Custom Cipher/ }).count() > 0);
@@ -296,7 +303,7 @@ try {
   assert.match(await page.locator('[role="status"]').innerText(), /incorrect key/);
 
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
-  assert.equal(await page.locator("h1").innerText(), "Appearance");
+  assert.equal(await page.locator("h1:visible").innerText(), "Appearance");
   await page.getByRole("group", { name: "Appearance mode" }).getByRole("button", { name: "Dark" }).click();
   assert.equal(await page.getByRole("group", { name: "Appearance mode" }).getByRole("button", { name: "Dark" }).getAttribute("aria-pressed"), "true");
   await page.locator("#theme-choice").selectOption("dracula");
@@ -359,7 +366,7 @@ try {
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({
     status: "PASS",
-    checked: [ "complete embedded MIT notice", "keyboard license disclosure", "mobile license layout", "classical recipe catalog", "12 bundled recipes", "recipe fingerprint visibility", "fingerprint unaffected by metadata", "fingerprint changes with rules", "passphrase-derived rule UI", "Vigenere passphrase requirement", "Affine configuration and saved copy", "Rail Fence parameter editing", "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
+    checked: [ "complete embedded MIT notice", "keyboard license disclosure", "mobile license layout", "classical recipe catalog", "14 bundled recipes", "recipe fingerprint visibility", "fingerprint unaffected by metadata", "fingerprint changes with rules", "passphrase-derived rule UI", "Vigenere passphrase requirement", "Affine configuration and saved copy", "Rail Fence parameter editing", "recipe selection", "reversible exact decode", "recipe-specific inspector labels", "no duplicate exact output", "unsaved recipe warning", "save from workbench", "save custom recipe", "persist recipe after reload", "import JSON recipe", "delete saved recipe", "duplicate and reorder rules", "configure shift parameters", "workbench render", "encode invoke", "decode invoke", "exact intermediate and speculative English separation", "candidate alternatives", "inline word selection", "inspector candidate buttons", "rejected-choice rollback", "reset choices", "editable reconstruction", "error feedback", "mode selection", "Dracula palette", "accent override", "background override", "font selection", "settings persistence", "reset", "mobile mode controls", "mobile layout"],
     screenshots: [
       { path: pngLicense, bytes: (await stat(pngLicense)).size },
       { path: pngMobileLicense, bytes: (await stat(pngMobileLicense)).size },

@@ -53,7 +53,7 @@ pub enum Rule {
 }
 
 impl Rule {
-    fn name(&self) -> &'static str {
+    pub(crate) fn name(&self) -> &'static str {
         match self {
             Self::PhoneticRotate => "Phonetic rotation",
             Self::RemoveVowels => "Remove vowels",
@@ -72,7 +72,7 @@ impl Rule {
             Self::DerivedRailFence => "Passphrase-derived Rail Fence",
         }
     }
-    fn lossy(&self) -> bool {
+    pub(crate) fn lossy(&self) -> bool {
         matches!(
             self,
             Self::PhoneticRotate | Self::RemoveVowels | Self::CollapseDoubles
@@ -102,8 +102,8 @@ impl Recipe {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.schema_version != 1 {
-            return Err("Unsupported recipe schema version (expected 1).".into());
+        if !matches!(self.schema_version, 1 | 2) {
+            return Err("Unsupported recipe schema version (expected 1 or 2).".into());
         }
         if self.id.is_empty()
             || self.id.len() > 64
@@ -191,7 +191,7 @@ pub struct RecipeResult {
 }
 
 pub fn builtins() -> Result<Vec<Recipe>, String> {
-    const DOCUMENTS: [&str; 12] = [
+    const DOCUMENTS: [&str; 14] = [
         include_str!("../../recipes/001.json"),
         include_str!("../../recipes/002.json"),
         include_str!("../../recipes/003.json"),
@@ -204,6 +204,8 @@ pub fn builtins() -> Result<Vec<Recipe>, String> {
         include_str!("../../recipes/010.json"),
         include_str!("../../recipes/011.json"),
         include_str!("../../recipes/012.json"),
+        include_str!("../../recipes/013.json"),
+        include_str!("../../recipes/014.json"),
     ];
     DOCUMENTS
         .iter()
@@ -216,11 +218,15 @@ pub fn builtins() -> Result<Vec<Recipe>, String> {
         .collect()
 }
 
-fn validate_inputs(recipe: &Recipe, text: &str, key: &str) -> Result<String, String> {
+pub(crate) fn validate_inputs(recipe: &Recipe, text: &str, key: &str) -> Result<String, String> {
     recipe.validate()?;
     if text.is_empty() || text.len() > MAX_INPUT_BYTES || !text.is_ascii() {
         return Err("Message must be nonempty ASCII text up to 16 KiB.".into());
     }
+    normalize_key(recipe, key)
+}
+
+pub(crate) fn normalize_key(recipe: &Recipe, key: &str) -> Result<String, String> {
     let key = key.trim().to_ascii_lowercase();
     if recipe.requires_key()
         && (key.is_empty() || key.len() > 64 || !key.bytes().all(|b| b.is_ascii_lowercase()))
@@ -379,6 +385,9 @@ fn apply(rule: &Rule, text: &str, key: &str, undo: bool) -> Result<String, Strin
 }
 
 pub fn encode(recipe: &Recipe, text: &str, key: &str) -> Result<RecipeResult, String> {
+    if recipe.schema_version == 2 {
+        return crate::documents::manual::evaluate(recipe, text, key, false, &[]);
+    }
     let key = validate_inputs(recipe, text, key)?;
     let mut current = text.to_owned();
     let mut stages = Vec::new();
@@ -420,6 +429,9 @@ pub fn decode(
     key: &str,
     choices: &[WordChoice],
 ) -> Result<RecipeResult, String> {
+    if recipe.schema_version == 2 {
+        return crate::documents::manual::evaluate(recipe, text, key, true, choices);
+    }
     let key = validate_inputs(recipe, text, key)?;
     let mut current = text.to_owned();
     let mut stages = Vec::new();
@@ -510,8 +522,9 @@ pub fn decode(
     })
 }
 
-mod classical;
+pub(crate) mod classical;
 pub mod fingerprint;
+pub mod lookup;
 pub mod skeleton;
 pub mod store;
 
@@ -530,7 +543,7 @@ mod tests {
     #[test]
     fn all_bundled_recipes_validate_and_are_data() {
         let recipes = builtins().unwrap();
-        assert_eq!(recipes.len(), 12);
+        assert_eq!(recipes.len(), 14);
         for recipe in recipes {
             recipe.validate().unwrap();
         }

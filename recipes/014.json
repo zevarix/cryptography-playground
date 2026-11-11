@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "id": "builtin-014",
+  "name": "UTF-8 word mirror",
+  "description": "Reverse ASCII-letter runs while retaining accents, other alphabets, punctuation and line endings.",
+  "steps": [
+    { "enabled": true, "rule": { "type": "word_mirror" } }
+  ]
+}

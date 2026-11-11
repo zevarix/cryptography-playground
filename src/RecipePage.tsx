@@ -24,10 +24,10 @@ function RuleOptions() {
       "phonetic_rotate", "remove_vowels", "collapse_doubles", "word_mirror",
       "pair_swap", "rotate_vowels", "position_shift",
     ] },
-    { name: "Classical substitution (cifers)", types: [
+    { name: "Classical substitution (ciphers)", types: [
       "caesar", "atbash", "vigenere", "beaufort", "affine",
     ] },
-    { name: "Classical transposition (cifers)", types: ["rail_fence"] },
+    { name: "Classical transposition (ciphers)", types: ["rail_fence"] },
     { name: "Passphrase-derived parameters", types: ["derived_caesar", "derived_rail_fence"] },
   ];
   return <>{groups.map(group => (
@@ -171,7 +171,7 @@ export default function RecipePage({
       <section className="recipe-editor">
         <div className="recipe-editor-top">
           <div>
-            <span className="section-kicker">RECIPE EDITOR · SCHEMA 1</span>
+            <span className="section-kicker">RECIPE EDITOR · SCHEMA {draft.schemaVersion}</span>
             <h1>{isBuiltin ? "Customize a bundled recipe" : "Build your own recipe"}</h1>
             <p>Compose and configure rules; the order determines the transformation.</p>
             <p className={"recipe-edit-status" + (hasUnsavedChanges ? " unsaved" : "")}

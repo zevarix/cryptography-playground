@@ -2,16 +2,23 @@
 
 A recipe is a versioned JSON configuration describing the sequence of rules to run. The configuration and passphrase are separate inputs; **neither the recipe nor the passphrase makes these classical/linguistic ciphers secure**.
 
-## Configuration fingerprint (CRYPT-R1)
+## Configuration fingerprints (CRYPT-R1 and CRYPT-R2)
 
 The editor and workbench display a short code such as `CRYPT-R1-0123456789abcdef` and offer a full 64-character SHA-256 digest for copying.
 
-Version 1 is computed as follows:
+Version 1 is computed as follows (version 2 substitutes the schema and domain shown below):
 
 1. Parse recipe JSON into the typed Rust `Recipe` structure and validate the schema.
 2. Serialize exactly `{"schemaVersion":1,"steps":[...]}` as compact UTF-8 JSON using the declared order of the typed `Step` and `Rule` fields. Each step includes its `enabled` flag, including a defaulted `true` value. Disabled steps, rule options, and step order are retained.
 3. SHA-256 the byte sequence `cryptoplay:recipe-configuration:v1\0` followed by those canonical JSON bytes. The `\0` here is one NUL byte.
 4. Present the full lowercase SHA-256 hex digest. The short comparison code is `CRYPT-R1-` followed by its first 16 lowercase hex digits. **Use the full digest for meaningful equality checks; the short code is a convenience only.**
+
+| Schema | Configuration domain | Display prefix | Parameter domain |
+| --- | --- | --- | --- |
+| 1 | `cryptoplay:recipe-configuration:v1\0` | `CRYPT-R1-` | `cryptoplay:rule-parameter:v1\0` |
+| 2 | `cryptoplay:recipe-configuration:v2\0` | `CRYPT-R2-` | `cryptoplay:rule-parameter:v2\0` |
+
+The version-2 canonical JSON starts with `{"schemaVersion":2,"steps":[...]}`. Each domain ends with one NUL byte. Schema 1 golden hashes and parameter derivations are unchanged. The same steps under schema 2 identify a different recipe and may derive different parameters.
 
 The recipe's `id`, `name` and `description` are not hashed. That means users can rename or duplicate a configuration without changing its fingerprint. Changing a rule, its settings, enabled flags, or step order changes the fingerprint. Reordering JSON object properties does not change the fingerprint, because typed decoding normalizes their order.
 
@@ -30,7 +37,7 @@ For each derived rule:
 
 1. Trim surrounding whitespace from the passphrase, convert ASCII letters to lowercase, then validate 1–64 ASCII English letters.
 2. Compute the 32-byte SHA-256 recipe configuration digest described above.
-3. SHA-256 `cryptoplay:rule-parameter:v1\0` + the raw 32-byte configuration digest + the rule index encoded as 4 little-endian bytes + the ASCII rule type ID (`derived_caesar` or `derived_rail_fence`) + one zero byte + normalized passphrase bytes.
+3. SHA-256 the parameter domain for the recipe schema (table above) + the raw 32-byte configuration digest + the rule index encoded as 4 little-endian bytes + the ASCII rule type ID (`derived_caesar` or `derived_rail_fence`) + one zero byte + normalized passphrase bytes.
 4. Interpret the first four digest bytes as an unsigned little-endian integer `n`.
 5. Caesar shift = `n % 26`. Rail count = `2 + (n % 15)`.
 
@@ -43,3 +50,9 @@ This fast derivation makes puzzles reproducible; it does not provide password st
 Export/import the recipe JSON separately from the passphrase. The recipient can compare the full recipe fingerprint, then enter the agreed passphrase. Use the same recipe configuration and passphrase to reproduce derived rule settings. The fingerprint alone does not tell the recipient which passphrase to use.
 
 Rule type identifiers and the derivation domain are explicitly versioned; **changing them in the future requires a new version** rather than silently changing previously saved recipe behavior.
+
+## Identifier lookup and companions
+
+File mode accepts a full 64-character SHA-256 value, a versioned short code, or the two-line fingerprint companion. The companion contains the short code followed by `SHA-256: ` and the full digest. If both identifiers are present they must agree. The parser accepts hexadecimal case and displays canonical lowercase.
+
+Lookup checks bundled and saved recipes. Metadata-only copies of the same configuration are equivalent. A short identifier matching distinct full configurations is rejected as ambiguous; use the full digest instead. A missing recipe is never inferred from the fingerprint: import the matching JSON. Imports remain session-local until explicitly saved to the library.

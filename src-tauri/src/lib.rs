@@ -1,5 +1,7 @@
+mod documents;
 mod engine;
 mod recipes;
+use tauri::{Emitter, Manager};
 
 #[tauri::command]
 fn encode_message(text: String, key: String) -> Result<engine::Encoded, String> {
@@ -70,6 +72,27 @@ fn evaluate_recipe(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            app.manage(documents::activities::AppDocuments::new().map_err(std::io::Error::other)?);
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
+                && let Some(documents) = window
+                    .app_handle()
+                    .try_state::<documents::activities::AppDocuments>()
+            {
+                match documents.register_drop(paths.clone()) {
+                    Ok(notice) => {
+                        let _ = window.emit("document-drop", notice);
+                    }
+                    Err(error) => {
+                        let _ = window.emit("document-drop-error", error);
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             encode_message,
             decode_message,
@@ -79,7 +102,23 @@ pub fn run() {
             save_recipe,
             delete_saved_recipe,
             evaluate_recipe,
-            recipe_fingerprint
+            recipe_fingerprint,
+            documents::commands::doc_open,
+            documents::commands::doc_open_drop,
+            documents::commands::doc_import,
+            documents::commands::doc_save,
+            documents::commands::doc_activity,
+            documents::commands::doc_cancel_activity,
+            documents::commands::doc_discard_activity,
+            documents::commands::doc_start,
+            documents::commands::doc_job,
+            documents::commands::doc_cancel_job,
+            documents::commands::doc_discard_job,
+            documents::commands::doc_discard_document,
+            documents::commands::doc_preview,
+            documents::commands::resolve_recipe_identifier,
+            documents::commands::doc_reconstruct,
+            documents::commands::doc_candidate_page
         ])
         .run(tauri::generate_context!())
         .expect("Tauri failed to start");

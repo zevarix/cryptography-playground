@@ -7,7 +7,7 @@ use ciphers::{Affine, Atbash, Beaufort, Caesar, Cipher, RailFence, Vigenere};
 
 use super::Rule;
 
-pub(super) fn transform(
+pub(crate) fn transform(
     rule: &Rule,
     text: &str,
     passphrase: &str,

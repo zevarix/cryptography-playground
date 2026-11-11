@@ -1,4 +1,4 @@
-# Data-driven recipes (schema 1)
+# Data-driven recipes (schemas 1 and 2)
 
 Cryptography Playground provides rule implementations in Rust and recipes as JSON content. The bundled examples use the same schema as user-created recipes. These are experimental ciphers, not secure encryption.
 
@@ -17,7 +17,7 @@ Cryptography Playground provides rule implementations in Rust and recipes as JSO
 }
 ~~~
 
-`schemaVersion` must be 1. IDs contain 1–64 lowercase ASCII letters, digits, or hyphens. Names must be nonblank and at most 100 UTF-8 bytes; descriptions may use up to 1,024 UTF-8 bytes. Each recipe has 1–16 steps, at least one enabled. Unknown rule types or fields are rejected, and options are range-checked for enabled rules. Recipes contain data, not executable scripts.
+`schemaVersion` is 1 for legacy ASCII semantics or 2 for UTF-8 document semantics. Existing recipes retain their version; creating a UTF-8 copy is an explicit operation with a new fingerprint. IDs contain 1–64 lowercase ASCII letters, digits, or hyphens. Names must be nonblank and at most 100 UTF-8 bytes; descriptions may use up to 1,024 UTF-8 bytes. Each recipe has 1–16 steps, at least one enabled. Unknown rule types or fields are rejected, and options are range-checked for enabled rules. Recipes contain data, not executable scripts.
 
 - position_shift: base 0–25, keyed true/false (passphrase optionally mixed into positional shift).
 - rotate_vowels: steps 0–4.
@@ -26,7 +26,7 @@ Cryptography Playground provides rule implementations in Rust and recipes as JSO
 - atbash: no parameters.
 - vigenere and beaufort: require the workbench passphrase (1-64 ASCII English letters); the key is not saved in JSON.
 - affine: multiplier a is one of 1,3,5,7,9,11,15,17,19,21,23,25; offset b is 0-25. Invalid values are rejected before upstream constructors can panic.
-- rail_fence: rails 2-16. All ASCII characters are transposed and restored, including whitespace and punctuation.
+- rail_fence: rails 2-16. All characters are transposed and restored, including whitespace and punctuation. Schema 1 uses ASCII bytes; schema 2 uses Unicode scalar values.
 - derived_caesar and derived_rail_fence: no numeric parameters in JSON; their values derive from the exact rule configuration, zero-based step position and workbench passphrase (1-64 ASCII English letters). See [the fingerprint/derivation specification](recipe-fingerprints.md).
 
 ## Rule catalog
@@ -49,7 +49,7 @@ Cryptography Playground provides rule implementations in Rust and recipes as JSO
 | Derived Caesar shift | derived_caesar | Yes (requires passphrase) |
 | Derived Rail Fence | derived_rail_fence | Yes (requires passphrase) |
 
-For reversible pipelines, decoding applies the enabled rules in reverse order and uses each inverse. These preserve supported ASCII input, including case, punctuation and whitespace.
+For reversible pipelines, decoding applies the enabled rules in reverse order and uses each inverse. Schema 1 preserves supported ASCII input, including case, punctuation and whitespace. Schema 2 extends reversible processing to UTF-8; alphabet rules change only ASCII English letters and Rail Fence transposes Unicode scalar values. See [document semantics](text-files.md#text-semantics).
 
 For lossy pipelines, the decoder reverses the final reversible suffix and retains the exact surviving intermediate. Phonetic rotation followed by reversible rules supports dictionary-ranked English suggestions. So does vowel removal followed by doubled-consonant collapse and a reversible suffix. Other lossy combinations have no reconstruction strategy. Recognition depends on rule types, not recipe IDs.
 
@@ -67,8 +67,10 @@ For lossy pipelines, the decoder reverses the final reversible suffix and retain
 - recipes/010.json: Atbash.
 - recipes/011.json: Classical Layers (Vigenere, Rail Fence and Atbash).
 - recipes/012.json: Passphrase-Derived Layers (Derived Caesar + Derived Rail Fence + Atbash).
+- recipes/013.json: UTF-8 document (schema 2, Caesar shift 3 + Rail Fence).
+- recipes/014.json: UTF-8 word mirror (schema 2).
 
-These are editable examples, not special engine implementations. The examples use base 5 for the unkeyed shift. Users can change this rule and reorder compatible rules.
+These are editable examples, not special engine implementations. The word mirror and pair/vowel examples use base 5 for the unkeyed shift. Users can change this rule and reorder compatible rules.
 
 The classical rules use ciphers 0.1.0, pinned in Cargo.toml. Its MIT notice is retained and included in the app. See [the adapter documentation](classical-cipher-adoption.md) for provenance, test vectors, and ASCII formatting behavior.
 
@@ -76,6 +78,6 @@ The classical rules use ciphers 0.1.0, pinned in Cargo.toml. Its MIT notice is r
 
 Custom recipes are JSON files in a `recipes` subdirectory under Tauri's app-data directory. Saving writes a temporary file in the same directory, renames it into place, then reads it back to verify the bytes. Storage is limited to 200 user recipes and 64 KiB per file.
 
-Users can create, duplicate, enable/disable, reorder, configure, save, and delete recipes, copy JSON, or import pasted/selected .json files. Copy JSON exports to the clipboard; paste into a file to share it. A native Save As dialog is not yet implemented.
+Users can create, duplicate, enable/disable, reorder, configure, save, and delete recipes, copy JSON, or import pasted/selected .json files. Copy JSON exports to the clipboard. File mode can also save a separate recipe JSON alongside the result through native Save As. A fingerprint companion is an alternative identifier, and cannot carry a missing recipe.
 
 Changes to rule semantics require a new rule or schema version rather than silently changing saved recipes.

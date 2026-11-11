@@ -7,16 +7,17 @@ Built with Rust, Tauri 2, React, and TypeScript. **These experimental and histor
 ## What you can do
 
 - Build recipes from configurable rules, enable or reorder steps, and inspect intermediate text.
-- Create, duplicate, import, and save recipes as local JSON. The 12 bundled examples use the same schema.
+- Create, duplicate, import, and save recipes as local JSON. The 14 bundled examples use the same schema.
 - Combine phonetic rotation, consonant skeletons, word mirroring, vowel rotation, and positional shifts with Caesar/ROT13, Vigenere, Beaufort, Affine, Atbash, and Rail Fence.
-- Compare recipe configurations using a reproducible `CRYPT-R1-...` fingerprint. Optional derived rules choose parameters from the configuration and runtime passphrase.
+- Compare recipe configurations using a reproducible `CRYPT-R1-...` or `CRYPT-R2-...` fingerprint. Optional derived rules choose parameters from the configuration and runtime passphrase.
+- Open UTF-8 `.txt` and `.md` files, inspect bounded previews, and save new results with an optional recipe JSON or fingerprint companion.
 - Customize the notebook's light/dark appearance, theme, accent, colors, and font.
 
 A recipe fingerprint identifies its configuration. It is not a secret key, signature, or proof of authenticity.
 
 ## Reversible steps and lossy guesses
 
-Reversible recipes decode supported ASCII input exactly, including case, punctuation, and whitespace. Rules that discard phonetic or spelling information cannot recover the original text uniquely.
+Reversible legacy recipes decode supported ASCII input exactly. Version 2 recipes support UTF-8 documents, preserving case, punctuation, whitespace and non-ASCII text according to each rule. Rules that discard phonetic or spelling information cannot recover the original text uniquely.
 
 For supported lossy recipes, the decoder keeps the exact surviving intermediate separate from a speculative English reconstruction. For example, **fox** and **fix** can share the same phonetic transform. Select alternative words to explore candidates that still re-encode consistently; a compatible candidate is not proof of the original plaintext.
 
@@ -26,8 +27,9 @@ Recipe 001 uses the Carnegie Mellon Pronouncing Dictionary. Unsupported words fa
 
 Use the **Recipes** panel to create or duplicate a recipe, configure its rules, then save it. Unsaved edits are marked and are lost when the app restarts. Saved custom recipes live in a `recipes` directory under Tauri's app-data directory. Appearance preferences are stored in the local WebView.
 
-Copy JSON to share a recipe, or import a pasted/selected JSON file. Passphrases are not included in recipe JSON. A native **Save As** dialog and persistent experiment history are not implemented.
+Copy JSON to share a recipe, or import a pasted/selected JSON file. Passphrases are not included in recipe JSON. In **File** mode, native **Save As** creates new files without replacing the original or an existing destination. File results and intermediate stages are temporary and disappear when the app closes; save results you want to keep.
 
+- [Opening files, saving results and recipe companions](docs/text-files.md)
 - [Recipe format and all bundled examples](docs/recipe-format.md)
 - [Fingerprint and derived-parameter specification](docs/recipe-fingerprints.md)
 - [Classical cipher adapters and test vectors](docs/classical-cipher-adoption.md)

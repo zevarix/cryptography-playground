@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::OnceLock;
+pub(crate) mod document;
 
 const FAMILY_PHONES: [&str; 24] = [
     "B", "CH", "D", "DH", "F", "G", "HH", "JH", "K", "L", "M", "N", "NG", "P", "R", "S", "SH", "T",
@@ -20,7 +21,7 @@ const MAX_TRANSFORMED_WORD_LENGTH: usize = 80;
 const MAX_ALTERNATIVES: usize = 5;
 static WORD_RANKS: OnceLock<HashMap<&'static str, usize>> = OnceLock::new();
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WordSuggestion {
     pub transformed: String,
