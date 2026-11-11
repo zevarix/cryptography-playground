@@ -2,7 +2,7 @@
 
 The preview helpers create portable ZIPs on Windows or macOS and a [Debian package on native Linux](#linux-debian-preview). The macOS helper also cross-compiles between Intel and Apple Silicon. They do not publish a release, use publisher signing credentials, or notarize a Mac app.
 
-To try the application, [download the published Preview 1 packages](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1). The commands below are for preparing new packages from source.
+To try the application, [download the published Preview 2 packages](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.2). Windows, Intel Mac and Ubuntu packages have native acceptance evidence; the Apple Silicon package remains an experimental download awaiting hardware testing. The commands below are for preparing new packages from source.
 
 Install the normal build prerequisites from the README and Python 3.12 or newer. Commit the source you intend to package, then run from the repository root:
 
@@ -54,7 +54,7 @@ python3 -m tools.preview_package --output .task-files/apple-silicon-preview-2 --
 
 This creates an `aarch64` ZIP and checksum. It uses a macOS 11.0 deployment target and retains the compiler-generated ad-hoc executable signature required for ARM code. Tauri binary patching is disabled to preserve those signed bytes. The helper checks the bundled executable's ARM64 architecture, equality with the standalone compiler output, and the standalone output's native signature verification. The linker signature does not seal the app bundle's resources or identify a publisher; the package manifest supplies a separate file/hash inventory. No publisher signing credentials or notarization are used.
 
-The README and manifest mark Apple Silicon runtime acceptance as pending. Cross-compilation and archive checks do not verify startup, rendering, file operations or saved experiments on the target hardware. The recorded macOS 11.0 minimum is a build setting, not tested compatibility with that OS version. Preview 2 is an experimental Apple Silicon download, separately approved by the owner; Preview 1 retains the existing tested platform downloads.
+The README and manifest mark Apple Silicon runtime acceptance as pending. Cross-compilation and archive checks do not verify startup, rendering, file operations or saved experiments on the target hardware. The recorded macOS 11.0 minimum is a build setting, not tested compatibility with that OS version. Preview 2 includes native-tested Windows, Intel Mac and Ubuntu packages alongside the separately qualified experimental Apple Silicon download.
 
 `--target` defaults to the compiler's native target. macOS additionally accepts `x86_64-apple-darwin` or `aarch64-apple-darwin`; other cross-platform requests are rejected. Existing Intel and Windows preview behavior is retained.
 

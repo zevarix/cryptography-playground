@@ -1,6 +1,6 @@
 # Saved experiments
 
-The local experiment library is available in current source builds. Published Preview 1 predates this feature.
+The local experiment library is available in [Preview 2 downloads](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.2) and current source builds. Published Preview 1 predates this feature.
 
 ## Save a completed run
 

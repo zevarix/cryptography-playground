@@ -4,11 +4,13 @@ The [source repository](https://github.com/zevarix/cryptography-playground) is p
 
 ## Published preview
 
-[Preview 1](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1) is available as unsigned Windows x64 and Intel Mac ZIPs and an Ubuntu 24.04 x64 Debian package. The release records exact source revisions, platform acceptance, retained notices, checksums, and upstream notice qualifications. Apple Silicon, older macOS versions, and other Linux distributions or architectures remain unverified.
+[Preview 2](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.2) includes the saved experiment library in Windows x64, Intel Mac and Ubuntu 24.04 x64 packages, plus an experimental Apple Silicon ZIP. All four were built from `f109b52458e238966d9def8a96e2fa128149957f`, pinned by the release tag and package manifests. Windows and Intel Mac extracted packages were adopted into their local test installations with rollback retained. Native acceptance covered restored experiments, Unicode file results and export; Windows additionally exercised fresh Text/File save, full process exit, restart and reopening after moving the original file. Ubuntu's exact Debian package was verified, installed with apt and native-window-tested in CI.
 
-The Mac app is unnotarized. Checksums establish archive integrity, not publisher identity. Preparation and verification are documented in [Unsigned preview packages](preview-packages.md).
+Windows, Intel Mac and Ubuntu packages are unsigned. Mac downloads are unnotarized. Checksums establish archive integrity, not publisher identity. Preparation and verification are documented in [Unsigned preview packages](preview-packages.md).
 
-[Preview 2](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.2) is a separate experimental Apple Silicon prerelease with the local saved experiment library. The owner approved publication on 2026-11-11 with the explicit limitation that Apple Silicon hardware testing remains pending. Its compiler-generated ad-hoc executable signature is retained; there is no publisher signature, app-bundle resource seal or notarization. The package pins its exact source and retained notices and provides a SHA-256 sidecar and payload manifest. This is not a verified platform-support claim, and it does not replace Preview 1's tested Windows, Intel Mac or Ubuntu packages.
+The owner approved publication on 2026-11-11 and subsequently clarified that Preview 2 should also carry the other platforms' updated packages. Apple Silicon hardware testing remains pending. Its compiler-generated ad-hoc executable signature is retained; there is no publisher signature, app-bundle resource seal or notarization. Its inclusion is not a verified platform-support claim. Older macOS versions and other Linux distributions or architectures remain unverified.
+
+[Preview 1](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1) remains available as the earlier release without saved experiments.
 
 ## Before each distribution
 

@@ -7,7 +7,9 @@ Use the existing committed-source preview packager. Add an explicit macOS archit
 - [x] Add regressions for target selection and real ARM signature verification, including changed executable bytes.
 - [x] Extend the existing helper and document the repeatable Intel-to-Apple-Silicon build.
 - [x] Run packaging checks and obtain an independent review (27 packaging tests passed; no P1/P2 findings).
-- [ ] Build from the committed revision, independently inspect an extracted archive and checksum, and confirm application sources match the tested saved-experiments revision.
-- [ ] Prepare and publish a GitHub prerelease with the ZIP, checksum, exact provenance and explicit runtime-testing limitation. Read back the published assets.
+- [x] Build from the committed revision, independently inspect an extracted archive and checksum, and confirm application sources match the tested saved-experiments revision.
+- [x] Prepare and publish a GitHub prerelease with the ZIP, checksum, exact provenance and explicit runtime-testing limitation. Read back the published assets.
 
-This release does not merge the saved-experiments development PR or claim new Windows/Intel Mac/Ubuntu packages. Preview 1 remains the tested download for those platforms. The compiler target and temporary output directories are build inputs/artifacts, not committed application data.
+The initial publication did not merge the saved-experiments development PR and included only the Apple Silicon package, leaving the other platforms on Preview 1. The compiler target and temporary output directories are build inputs/artifacts, not committed application data.
+
+Follow-up: after the initial Apple Silicon publication, the owner clarified that Preview 2 should include the other platforms too. Matching Windows, Intel Mac and Ubuntu packages were built from the same published source revision, `f109b52458e238966d9def8a96e2fa128149957f`, and added to Preview 2. Windows and Intel test installations were refreshed and native-checked; Ubuntu's exact package passed verification, apt installation and a native window check in the manual CI run. Apple Silicon's hardware limitation is unchanged. The release notes and public-readiness document record the final download set.
