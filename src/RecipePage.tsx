@@ -171,7 +171,7 @@ export default function RecipePage({
       <section className="recipe-editor">
         <div className="recipe-editor-top">
           <div>
-            <span className="section-kicker">RECIPE EDITOR · SCHEMA 1</span>
+            <span className="section-kicker">RECIPE EDITOR · SCHEMA {draft.schemaVersion}</span>
             <h1>{isBuiltin ? "Customize a bundled recipe" : "Build your own recipe"}</h1>
             <p>Compose and configure rules; the order determines the transformation.</p>
             <p className={"recipe-edit-status" + (hasUnsavedChanges ? " unsaved" : "")}
