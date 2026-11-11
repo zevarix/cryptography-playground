@@ -234,6 +234,50 @@
       "includeSource": true,
       "license": "MPL-2.0",
       "vcs": "572ecba2d1600e7c3d490586692a209faf703baa"
+    },
+    "webview2-com-sys@0.39.1": {
+      "files": [
+        {
+          "path": "licenses/upstream/webview2-rs-MIT.txt",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+        }
+      ],
+      "includeSource": false,
+      "license": "MIT",
+      "native": [
+        {
+          "artifact": "x64/WebView2LoaderStatic.lib",
+          "artifactSHA256": "89c6b872783b8f6c3cedbff618adb42082d455c615453ae10cfc753f1e8f25d8",
+          "files": [
+            {
+              "path": "licenses/upstream/Microsoft.Web.WebView2-1.0.3800.47-LICENSE.txt",
+              "sha256": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55"
+            },
+            {
+              "path": "licenses/upstream/Microsoft.Web.WebView2-1.0.3800.47-NOTICE.txt",
+              "sha256": "106423785c5b7eba0a8e61d1837f2132e9c828e20ad530f565d981c1df60dd90"
+            }
+          ],
+          "license": "BSD-3-Clause",
+          "name": "Microsoft.Web.WebView2",
+          "source": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3800.47/microsoft.web.webview2.1.0.3800.47.nupkg",
+          "sourceSHA256": "56c9f26bdd07916a2d1949fb58a5c7e434dfa1173577dca879206050c4e718db",
+          "target": "x86_64-pc-windows-msvc",
+          "version": "1.0.3800.47"
+        }
+      ],
+      "vcs": "edc2caf886175ccaebe86078c9cfe1ae2a187328"
+    },
+    "webview2-com@0.39.1": {
+      "files": [
+        {
+          "path": "licenses/upstream/webview2-rs-MIT.txt",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+        }
+      ],
+      "includeSource": false,
+      "license": "MIT",
+      "vcs": "edc2caf886175ccaebe86078c9cfe1ae2a187328"
     }
   }
 }

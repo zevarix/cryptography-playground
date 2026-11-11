@@ -1,12 +1,13 @@
 """Release helpers must preserve notice bytes and reject unsafe/incomplete packages."""
+import hashlib
 import json
 import os
 import subprocess
 from pathlib import Path
 import tempfile
 import unittest
-from tools.preview_notices import runtime_packages, license_files, checked_source_archive
-from tools.preview_package import check_binary_paths, write_archive, verify_payload, write_manifest, export_source
+from tools.preview_notices import runtime_packages, license_files, checked_source_archive, checked_native_component
+from tools.preview_package import check_binary_paths, write_archive, verify_payload, write_manifest, export_source, normalize_modes
 
 
 class PreviewTests(unittest.TestCase):
@@ -126,6 +127,38 @@ class PreviewTests(unittest.TestCase):
             (root / "app").write_bytes(b"changed")
             with self.assertRaisesRegex(ValueError, "hash"):
                 verify_payload(root)
+
+    def test_native_sdk_rejects_changed_artifact_notice_and_unverified_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "loader.lib").write_bytes(b"verified loader")
+            (root / "LICENSE").write_bytes(b"original terms\r\n")
+            entry = {"name": "SDK", "target": "verified-target", "artifact": "loader.lib",
+                     "artifactSHA256": hashlib.sha256(b"verified loader").hexdigest(),
+                     "files": [{"path": "LICENSE", "sha256": hashlib.sha256(b"original terms\r\n").hexdigest()}]}
+            self.assertEqual(checked_native_component(root, root, entry, "verified-target"), [root / "LICENSE"])
+            with self.assertRaisesRegex(ValueError, "target"):
+                checked_native_component(root, root, entry, "unverified-target")
+            (root / "loader.lib").write_bytes(b"new loader")
+            with self.assertRaisesRegex(ValueError, "artifact checksum"):
+                checked_native_component(root, root, entry, "verified-target")
+            (root / "loader.lib").write_bytes(b"verified loader")
+            (root / "LICENSE").write_bytes(b"changed terms")
+            with self.assertRaisesRegex(ValueError, "notice changed"):
+                checked_native_component(root, root, entry, "verified-target")
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_copied_payload_modes_are_portable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app").write_bytes(b"executable")
+            (root / "app").chmod(0o700)
+            (root / "NOTICE").write_bytes(b"notice")
+            (root / "NOTICE").chmod(0o600)
+            normalize_modes(root)
+            self.assertEqual(root.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((root / "app").stat().st_mode & 0o777, 0o755)
+            self.assertEqual((root / "NOTICE").stat().st_mode & 0o777, 0o644)
 
     def test_archive_contains_only_relative_payload_and_preserves_mode(self):
         import zipfile

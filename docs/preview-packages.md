@@ -17,6 +17,7 @@ Each ZIP contains the app, an opening guide, the project license, a file/hash ma
 Notice materials include:
 
 - Resolved Cargo/npm component versions and license text, including nested or supplemental notices.
+- The Windows WebView2 wrapper MIT notice and separate Microsoft SDK license/supplemental notices, verified against the linked native loader.
 - Matching Rust standard-library copyright and embedded license texts from the actual toolchain.
 - CMU attribution, the wordfreq acknowledgements and licensed ranking-data adaptation, and retained palette notices.
 - Complete published source archives for selected MPL components and for the retained objc2 notice overrides, with registry-lockfile checksum verification and a readable source index.

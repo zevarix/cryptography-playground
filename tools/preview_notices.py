@@ -55,7 +55,23 @@ def checked_source_archive(path, checksum):
     return path
 
 
-def assemble(root, metadata, output, source_commit):
+def checked_native_component(root, base, entry, target):
+    """Reject an unverified native target, artifact or retained SDK notice."""
+    if target != entry["target"]:
+        raise ValueError("No verified native notice mapping for target " + target)
+    artifact = base / entry["artifact"]
+    if not artifact.is_file() or digest(artifact) != entry["artifactSHA256"]:
+        raise ValueError("Native SDK artifact checksum changed: " + entry["name"])
+    paths = []
+    for notice in entry["files"]:
+        path = root / notice["path"]
+        if not path.is_file() or digest(path) != notice["sha256"]:
+            raise ValueError("Retained native SDK notice changed: " + notice["path"])
+        paths.append(path)
+    return paths
+
+
+def assemble(root, metadata, output, source_commit, target):
     output.mkdir(parents=True, exist_ok=False)
     policy = json.loads((root / "packaging/notice-overrides.json").read_text(encoding="utf-8"))
     locked = tomllib.loads((root / "src-tauri/Cargo.lock").read_text(encoding="utf-8"))["package"]
@@ -98,6 +114,13 @@ def assemble(root, metadata, output, source_commit):
             record["sourceArchive"] = copy(archive, "sources/" + archive.name)
             record["sourceSHA256"] = lock["checksum"]
         records.append(record)
+        for native in (override or {}).get("native", []):
+            paths = checked_native_component(root, base, native, target)
+            records.append({key: native[key] for key in [
+                "name", "version", "license", "source", "sourceSHA256",
+                "artifact", "artifactSHA256", "target"]} | {
+                "ecosystem": "native",
+                "notices": [copy(path, "native/" + native["name"] + "/" + path.name) for path in paths]})
 
     npm_lock = json.loads((root / "package-lock.json").read_text(encoding="utf-8"))
     for relative, package in sorted(npm_lock["packages"].items()):

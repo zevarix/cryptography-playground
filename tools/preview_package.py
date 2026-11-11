@@ -79,6 +79,15 @@ def verify_payload(root):
         raise ValueError("Payload hash differs from the manifest.")
 
 
+def normalize_modes(stage):
+    """Make the copied macOS payload readable without inheriting the build umask."""
+    for path in [stage, *stage.rglob("*")]:
+        if path.is_symlink():
+            continue
+        mode = path.stat().st_mode
+        path.chmod(0o755 if path.is_dir() or mode & 0o111 else 0o644)
+
+
 def write_archive(stage, output):
     with zipfile.ZipFile(output, "x", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(stage.rglob("*")):
@@ -140,7 +149,7 @@ def build(root, output, label):
         ["cargo", "metadata", "--manifest-path", "src-tauri/Cargo.toml", "--format-version", "1",
          "--locked", "--filter-platform", target, "--features", "tauri/custom-protocol"], cwd=root, env=environment))
     notices = output / "notices"
-    index = assemble(root, metadata, notices, source)
+    index = assemble(root, metadata, notices, source, target)
     pairs = [(Path.home(), "/build/user"),
              (Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")), "/build/cargo"),
              (checkout, "/src/cryptography-playground")]
@@ -205,6 +214,8 @@ def build(root, output, label):
                    "lockfiles": {p: digest(root / p) for p in ["src-tauri/Cargo.lock", "package-lock.json"]}}
     write_manifest(stage, information)
     verify_payload(stage)
+    if system == "macos":
+        normalize_modes(stage)
     archive = output / (name + ".zip")
     write_archive(stage, archive)
     with archive.with_suffix(".zip.sha256").open("x", encoding="utf-8") as stream:
