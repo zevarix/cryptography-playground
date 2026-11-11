@@ -16,4 +16,6 @@ For an ordinary cipher result or interface bug, use synthetic text and a minimal
 
 Custom recipes are stored in the app-data directory; appearance preferences use local WebView storage. Recipe JSON excludes the runtime passphrase. This does not make local storage or the clipboard a secure secret store.
 
+The renderer uses a [content security policy](docs/content-security-policy.md) that restricts resource loading and connections to bundled assets and the native bridge.
+
 Release security review, signing, and platform distribution are separate from a successful source build. See [the binary-release checklist](docs/public-readiness.md).
