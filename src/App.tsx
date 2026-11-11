@@ -6,17 +6,21 @@ import {
 } from "./theme";
 import RecipePage from "./RecipePage";
 import DocumentPanel from "./DocumentPanel";
+import ExperimentsPage from "./ExperimentsPage";
+import ExperimentSave from "./ExperimentSave";
+import ExperimentDialog from "./ExperimentDialog";
+import type { ExperimentSummary, OpenedExperiment } from "./experimentTypes";
 import type { FilePanelActions, FilePanelState } from "./documentTypes";
 import classicalCipherLicense from "../licenses/ciphers-0.1.0-MIT.txt?raw";
 import {
-  RULE_CATALOG, labelForRule, lossyRule, recipeNeedsKey,
+  RULE_CATALOG, labelForRule, lossyRule, recipeNeedsKey, copyRecipe, newUserRecipe,
   type RecipeFingerprint,
   type Recipe, type RecipeResult, type StageOutput, type Reconstruction,
   type RecoveryWord, type WordChoice,
 } from "./recipeTypes";
 import "./App.css";
 
-type Page = "workbench" | "recipes" | "appearance" | "general" | "about";
+type Page = "workbench" | "recipes" | "experiments" | "appearance" | "general" | "about";
 type Direction = "encode" | "decode";
 function wordOptions(word: RecoveryWord): string[] {
   return Array.from(new Set([word.suggested, ...word.alternatives]));
@@ -56,6 +60,14 @@ function App() {
   const [inputMode, setInputMode] = useState<"text" | "file">("text");
   const [fileState, setFileState] = useState<FilePanelState>({ busy: false, canRun: false, hasDocument: false });
   const fileActions = useRef<FilePanelActions | null>(null);
+  const [textRunId, setTextRunId] = useState<string | null>(null);
+  const [textDirty, setTextDirty] = useState(false);
+  const [restoredText, setRestoredText] = useState(false);
+  const [experimentBusy, setExperimentBusy] = useState(false);
+  const [experimentRevision, setExperimentRevision] = useState(0);
+  const [openPrompt, setOpenPrompt] = useState(false);
+  const confirmOpen = useRef<((answer: boolean) => void) | null>(null);
+  const openingExperiment = useRef(false);
   const [inspected, setInspected] = useState<"intermediate" | "ciphertext">("intermediate");
 
   useEffect(() => {
@@ -127,34 +139,51 @@ function App() {
     setLockedChoices([]); setSelectedWord(null); setChoosing(false);
     setStageOutputs([]); setExactOutput(false);
     setDetail(""); setMessage("");
+    setTextRunId(null);setRestoredText(false);setTextDirty(true);
+  }
+  function applyResult(result: RecipeResult, mode: Direction) {
+    setOutput(result.output);setReconstruction(result.reconstruction);setStageOutputs(result.stages);setExactOutput(result.exact);
+    setIntermediate(mode === "encode" && result.stages.length > 1 ? result.stages[result.stages.length - 2].text : result.intermediate);
+    setInspected(mode === "encode" ? "intermediate" : "ciphertext");setDetail(result.note);
+    if (mode === "encode") setCiphertext(result.output);
+  }
+  function answerOpen(answer: boolean) { const resolve = confirmOpen.current;confirmOpen.current = null;setOpenPrompt(false);resolve?.(answer); }
+  async function openExperiment(entry: ExperimentSummary) {
+    if (openingExperiment.current || busy || choosing || fileState.busy || experimentBusy) return;
+    openingExperiment.current = true;setExperimentBusy(true);
+    try {
+      if (textDirty || fileState.hasUnsavedResult || activeIsUnsaved) {
+        setOpenPrompt(true);
+        const accepted = await new Promise<boolean>(resolve => { confirmOpen.current = resolve; });
+        if (!accepted) return;
+      }
+      const opened = await invoke<OpenedExperiment>("open_experiment", { id: entry.id });
+      const recipe = copyRecipe(opened.kind === "text" ? opened.recipe : opened.job.recipe);
+      recipe.id = newUserRecipe().id;
+      clearResults();setPassphrase("");setActiveRecipe(recipe);setTextDirty(false);
+      if (opened.kind === "text") {
+        setInputMode("text");setDirection(opened.direction);
+        if (opened.direction === "encode") setPlaintext(opened.source);else setCiphertext(opened.source);
+        applyResult(opened.result, opened.direction);setLockedChoices(opened.choices);setTextRunId(opened.runId);setRestoredText(true);
+      } else {
+        setInputMode("file");setDirection(opened.job.direction);
+        fileActions.current?.restore(opened, recipe);
+      }
+      setPage("workbench");setMessage("Opened “" + opened.summary.name + "”. Passphrases are kept separate.");
+    } finally { openingExperiment.current = false;setExperimentBusy(false); }
   }
   async function run() {
     if (inputMode === "file") { fileActions.current?.run();return; }
-    if (busy || choosing || fileState.busy || !activeRecipe) return;
+    if (busy || choosing || fileState.busy || experimentBusy || !activeRecipe) return;
     const operation = ++operationId.current;
     setBusy(true); setChoosing(false); setMessage("");
     try {
-      const result = await invoke<RecipeResult>("evaluate_recipe", {
+      const result = await invoke<RecipeResult & { runId: string }>("evaluate_recipe", {
         recipe: activeRecipe, text: source, key: passphrase, direction, choices: [],
       });
       if (operation !== operationId.current) return;
-      setOutput(result.output);
-      setReconstruction(result.reconstruction);
-      setLockedChoices([]); setSelectedWord(null);
-      setStageOutputs(result.stages);
-      setExactOutput(result.exact);
-      if (direction === "encode") {
-        setCiphertext(result.output);
-        const beforeLast = result.stages.length > 1
-          ? result.stages[result.stages.length - 2].text
-          : result.intermediate;
-        setIntermediate(beforeLast);
-        setInspected("intermediate");
-      } else {
-        setIntermediate(result.intermediate);
-        setInspected("ciphertext");
-      }
-      setDetail(result.note);
+      applyResult(result, direction);setTextRunId(result.runId);setRestoredText(false);setTextDirty(true);
+      setLockedChoices([]);setSelectedWord(null);
       setMessage(result.exact
         ? (direction === "encode" ? "Reversible recipe encoded." : "Decoded exactly.")
         : direction === "encode"
@@ -166,14 +195,14 @@ function App() {
       if (operation !== operationId.current) return;
       setOutput(""); setIntermediate(""); setReconstruction(null);
       setStageOutputs([]); setExactOutput(false);
-      setDetail(""); setMessage(String(error));
+      setDetail(""); setMessage(String(error));setTextRunId(null);
     } finally {
       if (operation === operationId.current) setBusy(false);
     }
   }
 
   async function reviseChoices(next: WordChoice[], changed?: WordChoice) {
-    if (!reconstruction || !activeRecipe || direction !== "decode" || choosing || busy) return;
+    if (!reconstruction || !activeRecipe || direction !== "decode" || choosing || busy || experimentBusy || (needsKey && !passphrase.trim())) return;
     const operation = ++operationId.current;
     const previousOutput = output;
     const previousReconstruction = reconstruction;
@@ -188,7 +217,7 @@ function App() {
         index === changed.index ? changed.candidate : word.suggested).join(" "));
     }
     try {
-      const result = await invoke<RecipeResult>("evaluate_recipe", {
+      const result = await invoke<RecipeResult & { runId: string }>("evaluate_recipe", {
         recipe: activeRecipe, text: ciphertext, key: passphrase, direction: "decode", choices: next,
       });
       if (operation !== operationId.current) return;
@@ -197,7 +226,7 @@ function App() {
       setOutput(result.reconstruction.suggested);
       setReconstruction(result.reconstruction);
       setStageOutputs(result.stages);
-      setLockedChoices(next);
+      setLockedChoices(next);setTextRunId(result.runId);setTextDirty(true);
       setDetail(result.reconstruction.note);
       setInspected("ciphertext");
       setMessage(next.length
@@ -262,7 +291,7 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const navItems: Array<{ page: Exclude<Page, "workbench" | "recipes">; title: string; icon: string }> = [
+  const navItems: Array<{ page: Exclude<Page, "workbench" | "recipes" | "experiments">; title: string; icon: string }> = [
     { page: "general", title: "General", icon: "⚙" },
     { page: "appearance", title: "Appearance", icon: "☼" },
     { page: "about", title: "About", icon: "ⓘ" },
@@ -278,15 +307,17 @@ function App() {
               Unsaved draft
             </span>
           )}
-          <button className="top-run" onClick={() => void run()} disabled={inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || !source.trim() || (needsKey && !passphrase.trim()) || busy || choosing || fileState.busy}>▶ {busy ? "Running" : fileState.busy ? "Working" : "Run"}</button>
+          <button className="top-run" onClick={() => void run()} disabled={experimentBusy || (inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || !source.trim() || (needsKey && !passphrase.trim()) || busy || choosing || fileState.busy)}>▶ {busy ? "Running" : fileState.busy ? "Working" : "Run"}</button>
           <button onClick={() => setPage("appearance")} aria-label="Appearance settings" title="Appearance settings">⚙</button>
         </div>
       </header>
+      {openPrompt && <ExperimentDialog title="Open saved experiment?" confirmLabel="Open experiment" onConfirm={() => answerOpen(true)} onCancel={() => answerOpen(false)}><p>Opening replaces the notebook's current run and recipe. Cancel to save your current experiment first.</p></ExperimentDialog>}
       <div className="app-flex">
         <nav className="icon-rail" aria-label="Primary navigation">
           <button title="Workbench" aria-label="Workbench" className={page === "workbench" ? "active" : ""} onClick={() => setPage("workbench")}>▤</button>
           <button title="Recipes" aria-label="Recipes" className={page === "recipes" ? "active" : ""}
             onClick={() => setPage("recipes")}>▦</button>
+          <button title="Experiments" aria-label="Experiments" className={page === "experiments" ? "active" : ""} onClick={() => setPage("experiments")}>▣</button>
           <button title="Appearance" aria-label="Appearance" className={page === "appearance" ? "active" : ""} onClick={() => setPage("appearance")}>◐</button>
           <div className="spacer" />
           <button title="About" aria-label="About" className={page === "about" ? "active" : ""} onClick={() => setPage("about")}>ⓘ</button>
@@ -316,13 +347,13 @@ function App() {
                 </div>
               )}
               <label className="input-caption" htmlFor="operation-mode">Direction</label>
-              <select id="operation-mode" value={direction} onChange={e => { setDirection(e.target.value as Direction); clearResults(); }}>
+              <select disabled={experimentBusy} id="operation-mode" value={direction} onChange={e => { setDirection(e.target.value as Direction); clearResults(); }}>
                 <option value="encode">Encode plaintext</option><option value="decode">{stages.every(s => s.reversible) ? "Decode exactly" : "Decode / reconstruct English"}</option>
               </select>
               <div className="input-mode" role="group" aria-label="Input source"><button type="button" aria-pressed={inputMode === "text"} onClick={() => setInputMode("text")}>Text</button><button type="button" aria-pressed={inputMode === "file"} onClick={() => setInputMode("file")}>File</button></div>
               <div hidden={inputMode !== "text"}>
               <label htmlFor="source-input" className="input-caption">{direction === "encode" ? "Plaintext" : "Ciphertext"}</label>
-              <textarea id="source-input" rows={8} spellCheck={false} value={source} onChange={e => {
+              <textarea disabled={experimentBusy} id="source-input" rows={8} spellCheck={false} value={source} onChange={e => {
                 if (direction === "encode") setPlaintext(e.target.value);
                 else setCiphertext(e.target.value);
                 clearResults();
@@ -330,12 +361,13 @@ function App() {
               </div>
               <div className="file-source-actions" hidden={inputMode !== "file"}><button type="button" disabled={busy || choosing || fileState.busy} onClick={() => fileActions.current?.open()}>Open file</button><p className="helper-text">Drop a file into the app or choose a UTF-8 .txt or .md file.</p></div>
               <label className="input-caption" htmlFor="passphrase">Passphrase {needsKey ? "(required)" : "(unused)"}</label>
-              <input id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
-                onChange={e => { setPassphrase(e.target.value); clearResults(); }} />
+              <input disabled={experimentBusy} id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
+                onChange={e => { setPassphrase(e.target.value); if (!restoredText || inputMode !== "text") clearResults(); }} />
+              {restoredText && inputMode === "text" && needsKey && <p className="helper-text">Saved result restored. Re-enter the passphrase to rerun or change word choices.</p>}
               <p className="helper-text">{needsKey
                 ? "The enabled keyed rules use this passphrase. Some rules derive parameters from the recipe configuration and key."
                 : "This recipe has no keyed rule; the passphrase is ignored."}</p>
-              <button className="sidebar-run" onClick={() => void run()} disabled={inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || busy || choosing || fileState.busy || !source.trim() || (needsKey && !passphrase.trim())}>▶ {inputMode === "file" ? "Run file recipe" : direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
+              <button className="sidebar-run" onClick={() => void run()} disabled={experimentBusy || (inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || busy || choosing || fileState.busy || !source.trim() || (needsKey && !passphrase.trim()))}>▶ {inputMode === "file" ? "Run file recipe" : direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
               <div className="sidebar-note">
                 <strong>Experimental only</strong>
                 <p>{stages.some(s => !s.reversible)
@@ -386,7 +418,7 @@ function App() {
                                 aria-label={"Choose a different word for " + word.suggested + ", word " + (index + 1)}
                                 aria-expanded={selectedWord === index}
                                 onClick={() => setSelectedWord(selectedWord === index ? null : index)}
-                                disabled={choosing || busy} title={"Word " + (index + 1) + ": " + word.compatibleCount + " possible readings"}>
+                                disabled={choosing || busy || experimentBusy || (restoredText && needsKey && !passphrase.trim())} title={"Word " + (index + 1) + ": " + word.compatibleCount + " possible readings"}>
                                 {word.suggested}
                               </button>
                             ) : word.suggested}
@@ -411,7 +443,7 @@ function App() {
                               aria-pressed={reconstruction.words[selectedWord].suggested === candidate}
                               aria-label={"Use " + candidate + " for word " + (selectedWord + 1)}
                               onClick={() => chooseCandidate(selectedWord, candidate)}
-                              disabled={choosing || busy}>{candidate}</button>
+                              disabled={choosing || busy || experimentBusy || (restoredText && needsKey && !passphrase.trim())}>{candidate}</button>
                           ))}
                         </div>
                         <small>Selections are checked against the rest of the message.</small>
@@ -422,7 +454,7 @@ function App() {
                         <p className="reconstruction-warning">Click an underlined word in the English suggestion, or choose a candidate in the inspector. Each selection is checked against the full phonetic rotation; the original English still cannot be proven.</p>
                         <label htmlFor="english-edit" className="english-edit-label">Manual interpretation (candidate selections replace manual edits)</label>
                         <textarea id="english-edit" aria-label="Edit suggested English" value={output}
-                          onChange={event => setOutput(event.target.value)} spellCheck={true} rows={2}
+                          onChange={event => { setOutput(event.target.value);setTextRunId(null);setTextDirty(true); }} spellCheck={true} rows={2}
                           placeholder="Enter your preferred English interpretation..." />
                       </>
                     )}
@@ -437,10 +469,11 @@ function App() {
                     ))}
                   </details>
                 )}
+                {textRunId && <ExperimentSave target={{ kind: "text", runId: textRunId }} defaultName={activeRecipe?.name ?? "Text experiment"} disabled={busy || choosing || fileState.busy || experimentBusy} onBusy={setExperimentBusy} onSaved={() => { setTextDirty(false);setExperimentRevision(value => value + 1); }} />}
                 <div className="notebook-actions">
                   <span>{choosing ? "Rechecking the selected words and subsequent rotations…" : (detail || "No run recorded")}</span>
                   {direction === "decode" && lockedChoices.length > 0 && (
-                    <button disabled={choosing || busy} onClick={() => void reviseChoices([])}>Reset word selections ({lockedChoices.length})</button>
+                    <button disabled={choosing || busy || experimentBusy || (restoredText && needsKey && !passphrase.trim())} onClick={() => void reviseChoices([])}>Reset word selections ({lockedChoices.length})</button>
                   )}
                   <button disabled={!output || choosing} onClick={() => void copy(output)}>
                     {direction === "decode" ? (isReversibleRecipe ? "Copy decoded text" : "Copy English suggestion") : "Copy result"}
@@ -450,7 +483,8 @@ function App() {
               <DocumentPanel visible={inputMode === "file"} actionsRef={fileActions} recipe={activeRecipe} fingerprint={activeFingerprint}
                 builtins={builtins} unsavedRecipe={activeIsUnsaved} passphrase={passphrase} direction={direction}
                 onRecipe={activateRecipe} onSaveRecipe={saveRecipe} onNotice={setMessage}
-                onOpenMode={() => { setInputMode("file");setPage("workbench"); }} onStateChange={setFileState} />
+                onOpenMode={() => { setInputMode("file");setPage("workbench"); }} onStateChange={setFileState}
+                onExperimentSaved={() => setExperimentRevision(value => value + 1)} onExperimentBusy={setExperimentBusy} />
             </section>
             <aside className="inspector" hidden={inputMode === "file"}>
               <h2>Inspector</h2>
@@ -501,7 +535,7 @@ function App() {
                             className={candidate === word.suggested ? "candidate-current" : ""}
                             aria-pressed={candidate === word.suggested}
                             aria-label={"Use " + candidate + " for word " + (index + 1)}
-                            disabled={busy || choosing}
+                            disabled={busy || choosing || experimentBusy || (restoredText && needsKey && !passphrase.trim())}
                             onClick={() => chooseCandidate(index, candidate)}>
                             {candidate}
                           </button>
@@ -517,9 +551,9 @@ function App() {
                 </div>
             </aside>
           </main>
-        {page === "recipes" ? (
+        {page === "experiments" ? <ExperimentsPage busy={busy || choosing || fileState.busy || experimentBusy} revision={experimentRevision} onOpen={openExperiment} /> : page === "recipes" ? (
           <RecipePage builtins={builtins} saved={saved} active={activeRecipe}
-            busy={busy || choosing || fileState.busy} onActivate={activateRecipe}
+            busy={busy || choosing || fileState.busy || experimentBusy} onActivate={activateRecipe}
             onSave={saveRecipe} onDelete={deleteRecipe} onNotice={setMessage}
             onWorkbench={() => setPage("workbench")} />
         ) : page !== "workbench" ? (

@@ -14,6 +14,8 @@ Built with Rust, Tauri 2, React, and TypeScript. **These experimental and histor
 
 Apple Silicon, older macOS versions, and other Linux distributions or architectures have not been verified. These are unsigned preview builds; SHA-256 checksums verify download integrity, not publisher identity.
 
+Preview 1 predates the saved experiment library described below. Build from current source to use that feature.
+
 ## What you can do
 
 - Build recipes from configurable rules, enable or reorder steps, and inspect intermediate text.
@@ -21,6 +23,7 @@ Apple Silicon, older macOS versions, and other Linux distributions or architectu
 - Combine phonetic rotation, consonant skeletons, word mirroring, vowel rotation, and positional shifts with Caesar/ROT13, Vigenere, Beaufort, Affine, Atbash, and Rail Fence.
 - Compare recipe configurations using a reproducible `CRYPT-R1-...` or `CRYPT-R2-...` fingerprint. Optional derived rules choose parameters from the configuration and runtime passphrase.
 - Open UTF-8 `.txt` and `.md` files, inspect bounded previews, and save new results with an optional recipe JSON or fingerprint companion.
+- Save named experiments locally and reopen their input, result, stages and selected reading after restarting. Passphrases stay separate.
 - Customize the notebook's light/dark appearance, theme, accent, colors, and font.
 
 A recipe fingerprint identifies its configuration. It is not a secret key, signature, or proof of authenticity.
@@ -58,8 +61,9 @@ Recipe 001 uses the Carnegie Mellon Pronouncing Dictionary. Unsupported words fa
 
 Use the **Recipes** panel to create or duplicate a recipe, configure its rules, then save it. Unsaved edits are marked and are lost when the app restarts. Saved custom recipes live in a `recipes` directory under Tauri's app-data directory. Appearance preferences are stored in the local WebView.
 
-Copy JSON to share a recipe, or import a pasted/selected JSON file. Passphrases are not included in recipe JSON. In **File** mode, native **Save As** creates new files without replacing the original or an existing destination. File results and intermediate stages are temporary and disappear when the app closes; save results you want to keep.
+Copy JSON to share a recipe, or import a pasted/selected JSON file. Passphrases are not included in recipe JSON. In **File** mode, native **Save As** creates new files without replacing the original or an existing destination. File results and intermediate stages are temporary unless you explicitly save an experiment. Use **Save experiment** to retain a complete run in the local **Experiments** library, or **Save As** to export a result file.
 
+- [Saving and reopening experiments](docs/experiments.md)
 - [Opening files, saving results and recipe companions](docs/text-files.md)
 - [Recipe format and all bundled examples](docs/recipe-format.md)
 - [Fingerprint and derived-parameter specification](docs/recipe-fingerprints.md)
