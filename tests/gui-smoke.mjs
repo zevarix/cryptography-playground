@@ -44,6 +44,7 @@ try {
           const bytes = new TextEncoder().encode(content);
           const digest = await crypto.subtle.digest("SHA-256", bytes);
           const value = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+          window.__testLastFingerprintRecipe = args.recipe.name;
           return { algorithm: "SHA-256", version: 1, value, display: "CRYPT-R1-" + value.slice(0,16) };
         }
         if (command === "list_saved_recipes") return saved;
@@ -133,8 +134,14 @@ try {
   assert.notEqual(derivedFingerprint, initialFingerprint);
   const pngDerived = resolve(artifacts, "recipe-derived-parameters-editor.png");
   await page.screenshot({ path: pngDerived, fullPage: true, animations: "disabled" });
+  const copiedName = await page.locator("#recipe-name").inputValue() + " (copy)";
   await page.getByRole("button", { name: "Duplicate", exact: true }).click();
-  await page.waitForFunction((expected) => document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent === expected, derivedFingerprint);
+  // The old and copied recipes have the same fingerprint. Wait for the
+  // copy's completed request so the old value cannot satisfy this check.
+  await page.waitForFunction(({ expected, name }) =>
+    window.__testLastFingerprintRecipe === name &&
+    document.querySelector('[data-testid="recipe-fingerprint"]')?.textContent === expected,
+  { expected: derivedFingerprint, name: copiedName });
   assert.equal(await page.locator('[data-testid="recipe-fingerprint"]').innerText(), derivedFingerprint, "Metadata/ID-only copy should preserve fingerprint");
   await page.locator("#rule-0").selectOption("caesar");
   await page.waitForFunction((previous) =>
