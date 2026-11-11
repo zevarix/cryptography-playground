@@ -226,6 +226,7 @@ function App() {
     try {
       const result = await invoke<RecipeResult & { runId: string }>("evaluate_recipe", {
         recipe: activeRecipe, text: ciphertext, key: passphrase, direction: "decode", choices: next,
+        runId: restoredText ? textRunId : null,
       });
       if (operation !== operationId.current) return;
       if (!result.reconstruction?.suggested) throw new Error("No compatible English reconstruction was found.");

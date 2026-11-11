@@ -21,7 +21,7 @@ Stack: existing Rust/Tauri 2/React/TypeScript; no new dependencies or CI jobs.
 
 ## Interfaces shared by Tasks 2 and 3
 
-All IPC uses camelCase arguments. `evaluate_recipe` retains all existing result fields and adds `runId`. `save_text_experiment({runId,name}) -> Summary`; `save_file_experiment({jobId,readingId,name}) -> Summary` (readingId null excludes a reading). `list_experiments() -> {entries:Summary[],problems:string[]}`; `delete_experiment({id}) -> void`; `open_experiment({id}) -> Opened`.
+All IPC uses camelCase arguments. `evaluate_recipe` retains all existing result fields and adds `runId`. An optional input `runId` binds restored Text word changes/reset to their immutable native capture for complete forward verification; ordinary evaluations omit it. `save_text_experiment({runId,name}) -> Summary`; `save_file_experiment({jobId,readingId,name}) -> Summary` (readingId null excludes a reading). `list_experiments() -> {entries:Summary[],problems:string[]}`; `delete_experiment({id}) -> void`; `open_experiment({id}) -> Opened`.
 
 Summary = {id,name,createdAt,kind:'text'|'file',recipeName}. Opened is {kind:'text',summary,recipe,direction,source,result,choices,runId} or {kind:'file',summary,document,job,reading,choices}. Types reuse RecipeResult, WordChoice, DocumentInfo, JobInfo, ReadingInfo and DocChoice. File open adopts restored IDs in the existing document panel; JobInfo adds `restored:boolean` (false for normal runs). `doc_reconstruct` accepts optional `key` for restored jobs; old callers retain their current behavior. For restored jobs, the backend requires supplied runtime key normalization before reconstruction.
 

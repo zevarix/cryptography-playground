@@ -88,6 +88,7 @@ try {
           localStorage.setItem("test-experiments", JSON.stringify(experiments)); return;
         }
         if (command !== "evaluate_recipe") throw new Error("Unexpected command: " + command);
+        window.__testLastEvaluation = structuredClone(args);
         const { recipe, direction } = args;
         const keyRequired = recipe.steps.some(s => s.enabled &&
           (s.rule.type === "phonetic_rotate" ||
@@ -359,6 +360,7 @@ try {
   await page.waitForFunction(() =>
     document.querySelector('.statusbar [role="status"]')?.textContent?.includes("Choice not applied"));
   assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
+  assert.match(await page.evaluate(() => window.__testLastEvaluation.runId), /^text-run-/, "Restored word changes must refer to their immutable native capture for complete verification.");
   await page.getByRole("button", { name: /Reset word selections/ }).click();
   await page.waitForFunction(() =>
     document.querySelector("#cipher-result")?.textContent?.includes("brown fix jumps"));
