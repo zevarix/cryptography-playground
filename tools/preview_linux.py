@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import platform
 import re
-import shutil
 import struct
 import subprocess
 import tempfile
@@ -16,14 +15,16 @@ TARGETS = {"x86_64-unknown-linux-gnu": (62, "amd64"),
            "aarch64-unknown-linux-gnu": (183, "arm64")}
 
 
-def inspect_payload(root, source_commit, target):
+def inspect_payload(root, source_commit, target, product_name="Cryptography Playground"):
     binary = root / "usr/bin/cryptography-playground"
     data = binary.read_bytes()
     machine = TARGETS.get(target, (None, None))[0]
     if (len(data) < 64 or data[:7] != b"\x7fELF\x02\x01\x01"
             or struct.unpack_from("<H", data, 18)[0] != machine):
         raise ValueError("ELF architecture does not match the native target.")
-    notices = root / "usr/lib/cryptography-playground/notices"
+    notices = root / "usr/lib" / product_name / "notices"
+    if not notices.resolve().is_relative_to(root.resolve()):
+        raise ValueError("Unsafe packaged notice directory.")
     index = json.loads((notices / "index.json").read_text(encoding="utf-8"))
     if index["sourceCommit"] != source_commit:
         raise ValueError("Notice revision does not match the packaged source revision.")
@@ -42,15 +43,26 @@ def inspect_payload(root, source_commit, target):
     return {"binary": binary, "index": index}
 
 
+def normalize_control(control, label):
+    text = control.read_text(encoding="utf-8")
+    original = "Version: " + label
+    if original not in text.splitlines():
+        raise ValueError("Unexpected Debian preview version in generated control file.")
+    control.write_text(text.replace(original + "\n", "Version: " + label.replace("-", "~", 1) + "\n"),
+                       encoding="utf-8")
+
+
 def verify(archive, manifest):
     expected = json.loads(manifest.read_text(encoding="utf-8"))
+    if digest(archive) != expected["archiveSHA256"]:
+        raise ValueError("Debian archive checksum differs from its manifest hash.")
     with tempfile.TemporaryDirectory(prefix="playground-deb-verify-") as directory:
         root = Path(directory)
         subprocess.run(["dpkg-deb", "--raw-extract", str(archive), str(root)], check=True)
         actual = payload(root)
         if actual != expected["files"]:
             raise ValueError("Debian payload differs from its file/hash manifest.")
-        result = inspect_payload(root, expected["sourceCommit"], expected["target"])
+        result = inspect_payload(root, expected["sourceCommit"], expected["target"], expected["productName"])
         check_binary_paths(result["binary"], [str(Path.home())])
         if digest(result["binary"]) != expected["binarySHA256"]:
             raise ValueError("Debian executable differs from the manifest.")
@@ -95,7 +107,7 @@ def build(checkout, output, label):
         "Install using: sudo apt install ./cryptography-playground-" + label
         + "-linux-" + target.split("-")[0] + "-unsigned.deb\n"
         "Ubuntu/Debian system packages supply GTK and WebKit; no shared system libraries are bundled.\n"
-        "Notices: /usr/lib/cryptography-playground/notices/THIRD-PARTY-NOTICES.txt\n"
+        "Notices: /usr/lib/Cryptography Playground/notices/THIRD-PARTY-NOTICES.txt\n"
         "Upstream qualifications: project/packaging/UPSTREAM-NOTICES.md\n"
         "Source: https://github.com/zevarix/cryptography-playground/tree/" + source + "\n"
         "Verify the adjacent SHA-256 before installation. A checksum is not a publisher signature.\n",
@@ -122,12 +134,10 @@ def build(checkout, output, label):
         for field in ["Package", "Version", "Architecture", "Depends"]}
     if fields["Package"] != "cryptography-playground" or fields["Architecture"] != TARGETS[target][1]:
         raise ValueError("Debian package identity does not match the native application.")
-    # Debian's tilde sorts a preview before its eventual stable release.
-    if fields["Version"] != label.replace("-", "~", 1):
-        raise ValueError("Debian preview version must sort before the stable release.")
     extracted = output / "extracted"
     subprocess.run(["dpkg-deb", "--raw-extract", str(built), str(extracted)], check=True)
-    inspected = inspect_payload(extracted, source, target)
+    normalize_control(extracted / "DEBIAN/control", label)
+    inspected = inspect_payload(extracted, source, target, config["productName"])
     binary = inspected["binary"]
     check_binary_paths(binary, [str(Path.home()), str(checkout), str(root)])
     subprocess.run(["readelf", "-h", str(binary)], check=True)
@@ -140,8 +150,13 @@ def build(checkout, output, label):
         raise ValueError("Source changed during the preview build.")
     name = "cryptography-playground-" + label + "-linux-" + target.split("-")[0] + "-unsigned.deb"
     archive = output / name
-    shutil.copyfile(built, archive)
+    subprocess.run(["dpkg-deb", "--build", "--root-owner-group", str(extracted), str(archive)], check=True)
+    fields["Version"] = subprocess.check_output(
+        ["dpkg-deb", "--field", str(archive), "Version"], text=True).strip()
+    if fields["Version"] != label.replace("-", "~", 1):
+        raise ValueError("Debian preview version must sort before its stable release.")
     information = {"sourceCommit": source, "sourceExportSHA256": export_hash,
+                   "archiveSHA256": digest(archive), "productName": config["productName"],
                    "preview": label, "appVersion": label, "baseVersion": config["version"],
                    "target": target, "signing": "unsigned", "binarySHA256": digest(binary),
                    "rust": index["rust"]["version"], "debian": fields,

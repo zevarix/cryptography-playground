@@ -59,7 +59,7 @@ On native Linux, prepare a Debian package using the same committed-source and no
 python3 -m tools.preview_linux --output .task-files/linux-preview --label 0.1.0-preview.1
 ```
 
-This produces an unsigned `.deb`, its SHA-256 sidecar and a separate `.deb.manifest.json` inventory. The Debian preview version sorts before the stable application version. GTK and WebKit remain system dependencies; the package does not copy their shared libraries into the distribution. Application/dependency/data notices and selected corresponding sources are installed under `/usr/lib/cryptography-playground/notices`.
+This produces an unsigned `.deb`, its SHA-256 sidecar and a separate `.deb.manifest.json` inventory. The helper normalizes the generated Debian control version to use a tilde, so the preview sorts before the stable application version. The separate manifest pins the whole archive checksum as well as extracted file bytes. GTK and WebKit remain system dependencies; the package does not copy their shared libraries into the distribution. Application/dependency/data notices and selected corresponding sources are installed under `/usr/lib/Cryptography Playground/notices`.
 
 Compare the checksum before installing, then use `sudo apt install ./cryptography-playground-0.1.0-preview.1-linux-x86_64-unsigned.deb`. Package dependencies are resolved by apt. The initial acceptance target is Ubuntu 24.04 x64; other distributions and architectures need their own runtime acceptance.
 

@@ -161,6 +161,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.linux_preview
         run: |
           sudo apt-get install -y ./.task-files/linux-preview/*.deb
+          dpkg --compare-versions "$(dpkg-query -W -f='${Version}' cryptography-playground)" lt "$(node -p "require('./src-tauri/tauri.conf.json').version")"
           dbus-run-session -- xvfb-run -a python3 ci/linux_smoke.py --binary /usr/bin/cryptography-playground
       - name: Upload reviewed-candidate Linux package
         if: github.event_name == 'workflow_dispatch' && inputs.linux_preview

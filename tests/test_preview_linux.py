@@ -1,9 +1,11 @@
 """Linux preview validation checks the extracted package that people install."""
+import hashlib
 import json
 from pathlib import Path
 import struct
 import tempfile
 import unittest
+from tools import preview_linux
 from tools.preview_linux import inspect_payload
 
 
@@ -13,7 +15,7 @@ class LinuxPreviewTests(unittest.TestCase):
         binary.parent.mkdir(parents=True)
         binary.write_bytes(b"\x7fELF\x02\x01\x01" + b"\x00" * 9 +
                            struct.pack("<HH", 3, 62) + b"\x00" * 44)
-        notices = root / "usr/lib/cryptography-playground/notices"
+        notices = root / "usr/lib/Cryptography Playground/notices"
         notices.mkdir(parents=True)
         (notices / "LICENSE").write_text("fixture notice")
         (notices / "source.crate").write_bytes(b"fixture source")
@@ -21,6 +23,25 @@ class LinuxPreviewTests(unittest.TestCase):
                  "components": [{"notices": ["LICENSE"], "sourceArchive": "source.crate"}]}
         (notices / "index.json").write_text(json.dumps(index))
         return binary, notices
+
+    def test_debian_control_version_sorts_preview_before_stable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory) / 'control'
+            control.write_text('Package: cryptography-playground\nVersion: 0.1.0-preview.1\nArchitecture: amd64\n')
+            preview_linux.normalize_control(control, '0.1.0-preview.1')
+            self.assertEqual(control.read_text(), 'Package: cryptography-playground\nVersion: 0.1.0~preview.1\nArchitecture: amd64\n')
+
+    def test_changed_debian_metadata_or_extra_root_file_fails_before_extraction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / 'package.deb'
+            manifest = root / 'package.deb.manifest.json'
+            archive.write_bytes(b'original-debian-archive')
+            manifest.write_text(json.dumps({'archiveSHA256': hashlib.sha256(archive.read_bytes()).hexdigest()}))
+            for changed in [b'archive-with-mode-change', b'archive-with-extra-root-manifest']:
+                archive.write_bytes(changed)
+                with self.assertRaisesRegex(ValueError, 'archive.*hash|archive.*checksum'):
+                    preview_linux.verify(archive, manifest)
 
     def test_package_keeps_matching_source_notices_and_native_architecture(self):
         with tempfile.TemporaryDirectory() as directory:

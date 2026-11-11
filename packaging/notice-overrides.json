@@ -49,6 +49,32 @@
       "license": "Zlib OR Apache-2.0 OR MIT",
       "vcs": "8852b424193ca41602281b3d7540d7c8ed51e49a"
     },
+    "dlopen2@0.8.2": {
+      "files": [
+        {
+          "path": "licenses/upstream/dlopen2-MIT.txt",
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2"
+        }
+      ],
+      "includeSource": false,
+      "license": "MIT",
+      "vcs": "cc80e4a0a90d499b677fdf7743699b4b3a43a989"
+    },
+    "libappindicator-sys@0.9.0": {
+      "files": [
+        {
+          "path": "licenses/upstream/libappindicator-MIT.txt",
+          "sha256": "eb227437252b2a7a9c1fc342c93ade1f3d7ce38cc6dd754f613db07d53ceff0b"
+        },
+        {
+          "path": "licenses/upstream/libappindicator-APACHE-2.0.txt",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        }
+      ],
+      "includeSource": false,
+      "license": "Apache-2.0 OR MIT",
+      "vcs": "eafd1e3682a1247f595410266091e9684021cb6f"
+    },
     "objc2-app-kit@0.3.2": {
       "files": [
         {

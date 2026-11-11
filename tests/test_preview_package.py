@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 import unittest
+from tools import preview_notices
 from tools.preview_notices import runtime_packages, license_files, checked_source_archive, checked_native_component
 from tools.preview_package import check_binary_paths, write_archive, verify_payload, write_manifest, export_source, normalize_modes
 
@@ -57,6 +58,19 @@ class PreviewTests(unittest.TestCase):
             self.assertFalse((destination / "public/private-notes.txt").exists())
             self.assertFalse((destination / "public/ignored.log").exists())
             self.assertFalse((destination / ".env").exists())
+
+    def test_patched_glib_links_to_exact_project_revision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / 'src-tauri/vendor/glib'
+            base.mkdir(parents=True)
+            package = {'name': 'glib', 'version': '0.18.5', 'source': None, 'manifest_path': str(base / 'Cargo.toml')}
+            url, provenance = preview_notices.source_reference(root, package, 'a' * 40)
+            self.assertEqual(url, 'https://github.com/zevarix/cryptography-playground/tree/' + 'a' * 40 + '/src-tauri/vendor/glib')
+            self.assertEqual(provenance, [root / 'src-tauri/vendor/README.md'])
+            package['manifest_path'] = str(root / 'unreviewed/glib/Cargo.toml')
+            with self.assertRaisesRegex(ValueError, 'path dependency'):
+                preview_notices.source_reference(root, package, 'a' * 40)
 
     def test_runtime_closure_excludes_build_dev_and_proc_macro(self):
         def p(name, kind="lib"):
