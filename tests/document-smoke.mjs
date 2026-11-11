@@ -82,6 +82,8 @@ try {
           state.experiments.push({ summary, job, reading });localStorage.setItem("file-experiments", JSON.stringify(state.experiments));return summary;
         }
         if (command === "open_experiment") {
+          if (state.dropDuringExperimentOpen) state.emit("document-drop", { token: "owned-immediate-loading-drop", name: "replacement.md" });
+          if (state.holdExperimentOpen) await new Promise(resolve => { state.releaseExperimentOpen = resolve; });
           const saved = state.experiments.find(value => value.summary.id === args.id);
           const id = "job-restored-" + ++state.next;
           const document = { id: "document-restored-" + ++state.next, name: "notes.md", encoding: "UTF-8", bytes: "16449", digest: "a".repeat(64), bom: true, legacyCompatible: false };
@@ -193,9 +195,17 @@ try {
   await panel.getByRole("button", { name: "Save experiment", exact: true }).click();
   await panel.getByText("Saved “Document reading” in Experiments.", { exact: true }).waitFor();
   await page.reload({ waitUntil: "networkidle" });
+  await page.evaluate(() => { window.fileFixture.holdExperimentOpen = true;window.fileFixture.dropDuringExperimentOpen = true; });
   await page.getByRole("button", { name: "Experiments", exact: true }).click();
   await page.getByRole("button", { name: "Open Document reading", exact: true }).click();
+  await page.waitForFunction(() => !!window.fileFixture.releaseExperimentOpen);
+  await page.evaluate(() => window.fileFixture.emit("document-drop", { token: "owned-loading-drop", name: "replacement.md" }));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => window.fileFixture.calls.filter(call => call.command === "doc_open_drop").length), 0, "A native drop cannot start another file open while an experiment is loading.");
+  assert.equal(await page.getByRole("heading", { name: "Experiments", exact: true }).isVisible(), true, "A rejected drop preserves library navigation.");
+  await page.evaluate(() => { window.fileFixture.holdExperimentOpen = false;window.fileFixture.dropDuringExperimentOpen = false;window.fileFixture.releaseExperimentOpen(); });
   await wait(".document-panel h1", "notes.md");
+  assert.equal(await panel.locator(".document-result").count(), 1, "The saved result remains restored after the rejected concurrent drop.");
   assert.equal(await page.locator("#passphrase").inputValue(), "");
   assert.equal(await panel.getByRole("button", { name: "Suggest an English reading", exact: true }).isDisabled(), true);
   assert.equal(await panel.getByLabel("English preview text", { exact: true }).innerText(), "the quick brown fox");

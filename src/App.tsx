@@ -63,7 +63,8 @@ function App() {
   const [textRunId, setTextRunId] = useState<string | null>(null);
   const [textDirty, setTextDirty] = useState(false);
   const [restoredText, setRestoredText] = useState(false);
-  const [experimentBusy, setExperimentBusy] = useState(false);
+  const [experimentBusy, setExperimentBusyState] = useState(false);
+  const experimentBusyRef = useRef(false);
   const [experimentRevision, setExperimentRevision] = useState(0);
   const [openPrompt, setOpenPrompt] = useState(false);
   const confirmOpen = useRef<((answer: boolean) => void) | null>(null);
@@ -133,6 +134,11 @@ function App() {
   function setLook(patch: Partial<Appearance>) {
     setAppearance(current => ({ ...current, ...patch }));
   }
+  function setExperimentBusy(value: boolean) {
+    // Native events can arrive before React publishes the disabled controls.
+    experimentBusyRef.current = value;
+    setExperimentBusyState(value);
+  }
   function clearResults() {
     operationId.current += 1;
     setOutput(""); setIntermediate(""); setReconstruction(null);
@@ -149,7 +155,7 @@ function App() {
   }
   function answerOpen(answer: boolean) { const resolve = confirmOpen.current;confirmOpen.current = null;setOpenPrompt(false);resolve?.(answer); }
   async function openExperiment(entry: ExperimentSummary) {
-    if (openingExperiment.current || busy || choosing || fileState.busy || experimentBusy) return;
+    if (openingExperiment.current || busy || choosing || fileState.busy || experimentBusyRef.current) return;
     openingExperiment.current = true;setExperimentBusy(true);
     try {
       if (textDirty || fileState.hasUnsavedResult || activeIsUnsaved) {
@@ -173,6 +179,7 @@ function App() {
     } finally { openingExperiment.current = false;setExperimentBusy(false); }
   }
   async function run() {
+    if (experimentBusyRef.current) return;
     if (inputMode === "file") { fileActions.current?.run();return; }
     if (busy || choosing || fileState.busy || experimentBusy || !activeRecipe) return;
     const operation = ++operationId.current;
@@ -359,7 +366,7 @@ function App() {
                 clearResults();
               }} placeholder="Enter text" />
               </div>
-              <div className="file-source-actions" hidden={inputMode !== "file"}><button type="button" disabled={busy || choosing || fileState.busy} onClick={() => fileActions.current?.open()}>Open file</button><p className="helper-text">Drop a file into the app or choose a UTF-8 .txt or .md file.</p></div>
+              <div className="file-source-actions" hidden={inputMode !== "file"}><button type="button" disabled={busy || choosing || fileState.busy || experimentBusy} onClick={() => fileActions.current?.open()}>Open file</button><p className="helper-text">Drop a file into the app or choose a UTF-8 .txt or .md file.</p></div>
               <label className="input-caption" htmlFor="passphrase">Passphrase {needsKey ? "(required)" : "(unused)"}</label>
               <input disabled={experimentBusy} id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
                 onChange={e => { setPassphrase(e.target.value); if (!restoredText || inputMode !== "text") clearResults(); }} />
@@ -481,6 +488,7 @@ function App() {
                 </div>
               </article>
               <DocumentPanel visible={inputMode === "file"} actionsRef={fileActions} recipe={activeRecipe} fingerprint={activeFingerprint}
+                experimentBusy={experimentBusy} isExperimentBusy={() => experimentBusyRef.current}
                 builtins={builtins} unsavedRecipe={activeIsUnsaved} passphrase={passphrase} direction={direction}
                 onRecipe={activateRecipe} onSaveRecipe={saveRecipe} onNotice={setMessage}
                 onOpenMode={() => { setInputMode("file");setPage("workbench"); }} onStateChange={setFileState}

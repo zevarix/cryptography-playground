@@ -9,6 +9,7 @@ import type { ActivityInfo, ActivityResult, CandidatePage, Companion, DocChoice,
 type Props = {
   visible: boolean; actionsRef: Ref<FilePanelActions>; recipe: Recipe | null; fingerprint: RecipeFingerprint | null;
   builtins: Recipe[]; unsavedRecipe: boolean; passphrase: string; direction: "encode" | "decode";
+  experimentBusy: boolean; isExperimentBusy: () => boolean;
   onExperimentSaved: () => void; onExperimentBusy: (value: boolean) => void;
   onRecipe: (recipe: Recipe) => void; onSaveRecipe: (recipe: Recipe) => Promise<Recipe>;
   onNotice: (text: string) => void; onOpenMode: () => void; onStateChange: (state: FilePanelState) => void;
@@ -69,7 +70,7 @@ export default function DocumentPanel(props: Props) {
   const [notice, setNotice] = useState("");
   const [operationBusy, setBusy] = useState(false);
   const [savingExperiment, setSavingExperiment] = useState(false);
-  const busy = operationBusy || savingExperiment;
+  const busy = operationBusy || savingExperiment || props.experimentBusy;
   const [progress, setProgress] = useState<{ phase: string; bytes: string; total: string | null } | null>(null);
   const pending = useRef<Pending | null>(null);
   const version = useRef(0);
@@ -92,7 +93,7 @@ export default function DocumentPanel(props: Props) {
     alive.current = true;
     let active = true;
     let stopDrop: (() => void) | undefined, stopError: (() => void) | undefined;
-    void listen<DropNotice>("document-drop", event => { if (active) { latest.current.onOpenMode();void openAction.current(event.payload.token); } })
+    void listen<DropNotice>("document-drop", event => { if (active) void openAction.current(event.payload.token); })
       .then(stop => { if (active) stopDrop = stop;else stop(); }).catch(() => {});
     void listen<string>("document-drop-error", event => { if (active) announce(event.payload); })
       .then(stop => { if (active) stopError = stop;else stop(); }).catch(() => {});
@@ -132,6 +133,7 @@ export default function DocumentPanel(props: Props) {
   }
   function answer(value: boolean) { const resolve = confirmationRef.current;confirmationRef.current = null;setConfirmation(null);resolve?.(value); }
   function begin(kind: Pending["kind"]): Pending | null {
+    if (latest.current.isExperimentBusy()) return null;
     if (pending.current) { announce("Wait for the current operation or cancel it first.");return null; }
     const operation = { kind, id: null, cancelled: false, version: version.current };
     pending.current = operation;setBusy(true);setProgress({ phase: kind === "save" ? "Choose a new filename" : "Starting…", bytes: "0", total: null });setNotice("");return operation;
@@ -155,7 +157,9 @@ export default function DocumentPanel(props: Props) {
     }
   }
   async function open(token?: string) {
+    if (latest.current.isExperimentBusy()) { announce("Wait for the experiment operation to finish before opening another file.");return; }
     if (pending.current) { announce("Cancel the current operation before opening another file.");return; }
+    latest.current.onOpenMode();
     if (jobRef.current && savedJob !== jobRef.current.id && !await ask("result")) return;
     const operation = begin("open");if (!operation) return;
     try {
@@ -205,7 +209,9 @@ export default function DocumentPanel(props: Props) {
     } catch (error) { announce(failure(error));return false; } finally { end(operation); }
   }
   async function select(recipe: Recipe) {
+    if (latest.current.isExperimentBusy()) return;
     if (latest.current.unsavedRecipe && !await ask("recipe")) return;
+    if (latest.current.isExperimentBusy()) return;
     latest.current.onRecipe(recipe);setMissingRecipe(false);
   }
   async function compatibleCopy() {
@@ -216,6 +222,7 @@ export default function DocumentPanel(props: Props) {
     await select(copy);announce("The UTF-8 copy has a new fingerprint. Save the recipe to keep it.");
   }
   async function lookup(value = identifier) {
+    if (latest.current.isExperimentBusy()) return;
     if (!value.trim()) return;
     try {
       const found = await invoke<Recipe | null>("resolve_recipe_identifier", { identifier: value });
