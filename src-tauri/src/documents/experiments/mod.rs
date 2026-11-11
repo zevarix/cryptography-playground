@@ -23,6 +23,7 @@ use std::{
 
 const MAX_METADATA: u64 = 4 * 1024 * 1024;
 const MAX_ENTRIES: usize = 200;
+const SAVE_LOCK: &str = ".save.lock";
 const MAX_CAPTURES: usize = 64;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -226,11 +227,15 @@ impl Library {
             );
         }
         let result = recipes::decode(&capture.recipe, &capture.source, key, choices)?;
-        let selected = result
-            .reconstruction
-            .as_ref()
-            .and_then(|reading| reading.suggested.as_deref())
-            .ok_or("No compatible English reconstruction was found.")?;
+        let selected = if result.exact {
+            result.output.as_str()
+        } else {
+            result
+                .reconstruction
+                .as_ref()
+                .and_then(|reading| reading.suggested.as_deref())
+                .ok_or("No compatible English reconstruction was found.")?
+        };
         let forward = recipes::encode(&capture.recipe, selected, key)?;
         if forward.output != capture.source {
             return Err("The selected reading does not re-encode to the complete captured ciphertext. The previous result is preserved.".into());
@@ -343,13 +348,15 @@ impl Library {
             .map_err(|_| "Experiment storage is unavailable.")?;
         control.check()?;
         validate_name(name)?;
-        ensure_root(&self.root)?;
+        let root = ensure_root(&self.root)?;
+        // The handle spans admission and exclusive publication across app instances.
+        let _writer = lock_for_save(&root)?;
         let mut count = 0_usize;
-        for entry in fs::read_dir(&self.root).map_err(|e| io_error("Cannot list experiments", e))? {
+        for entry in fs::read_dir(&root).map_err(|e| io_error("Cannot list experiments", e))? {
             let entry = entry.map_err(|e| io_error("Cannot inspect experiment entry", e))?;
             let id = entry.file_name();
             if let Some(id) = id.to_str()
-                && let Ok(path) = entry_path(&self.root, id)
+                && let Ok(path) = entry_path(&root, id)
                 && read_manifest(&path, id, control).is_ok()
             {
                 count += 1;
@@ -365,7 +372,7 @@ impl Library {
                     .into(),
             );
         }
-        let staged = super::private_tempdir(".staging-", Some(&self.root))
+        let staged = super::private_tempdir(".staging-", Some(&root))
             .map_err(|e| io_error("Cannot stage experiment", e))?;
         let id = fresh_id("experiment-")?;
         let (kind, recipe_name) = match &capture {
@@ -416,7 +423,7 @@ impl Library {
         }
         let metadata = stage_manifest(staged.path(), &id, &data, control)?;
         metadata.publish(control)?;
-        let destination = entry_path(&self.root, &id)?;
+        let destination = entry_path(&root, &id)?;
         publish_directory(staged, &destination, control)?;
         Ok(summary)
     }
@@ -449,7 +456,7 @@ impl Library {
                 }
             };
             let id = entry.file_name().to_string_lossy().into_owned();
-            if id.starts_with(".staging-") {
+            if id == SAVE_LOCK || id.starts_with(".staging-") {
                 continue;
             }
             match entry_path(&self.root, &id)

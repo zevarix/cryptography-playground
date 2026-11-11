@@ -39,6 +39,7 @@ try {
     let experiments = JSON.parse(localStorage.getItem("test-experiments") ?? "[]");
     const capture = (args, result) => {
       const runId = "text-run-" + ++nextRun;
+      window.__testLatestCapture = runId;
       runs.set(runId, structuredClone({ recipe: args.recipe, direction: args.direction, source: args.text, choices: args.choices, result }));
       return { ...result, runId };
     };
@@ -68,6 +69,7 @@ try {
         }
         if (command === "list_experiments") return { entries: experiments.map(entry => entry.summary), problems: ["A damaged experiment could not be read."] };
         if (command === "save_text_experiment") {
+          if (window.__testHoldSave) await new Promise(resolve => { window.__testReleaseSave = resolve; });
           const run = runs.get(args.runId);
           if (!run || Object.keys(args).sort().join(",") !== "name,runId") throw new Error("Save must refer only to a captured run.");
           const summary = { id: "experiment-" + (experiments.length + 1), name: args.name, createdAt: "1794432000", kind: "text", recipeName: run.recipe.name };
@@ -80,6 +82,7 @@ try {
           const entry = experiments.find(entry => entry.summary.id === args.id);
           if (!entry) throw new Error("Unknown experiment.");
           const runId = "text-run-" + ++nextRun;
+          window.__testLatestCapture = runId;
           runs.set(runId, structuredClone(entry));
           return { ...structuredClone(entry), runId };
         }
@@ -144,6 +147,12 @@ try {
   await page.goto("http://127.0.0.1:15423/", { waitUntil: "networkidle" });
   assert.equal(await page.title(), "Cryptography Playground");
   assert.match(await page.locator("h1:visible").innerText(), /Experiment: Phonetic Rotation/);
+  const initialSource = await page.locator("#source-input").inputValue();
+  await page.locator("#source-input").fill("   ");
+  assert.equal(await page.locator(".top-run").isDisabled(), true);
+  await page.keyboard.press("Control+Enter");
+  assert.equal(await page.evaluate(() => window.__testLastEvaluation), undefined, "A shortcut with blank Text must not submit a run.");
+  await page.locator("#source-input").fill(initialSource);
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   const pngRecipes = resolve(artifacts, "recipe-library-and-builder.png");
   assert.equal(await page.locator(".recipe-library-entry").count(), 14);
@@ -312,7 +321,19 @@ try {
   assert.equal(await page.getByRole("group", { name: "Candidates for word 4 (fucc)" })
     .getByRole("button", { name: "Use fox for word 4" }).getAttribute("aria-pressed"), "true");
   await page.getByRole("textbox", { name: "Experiment name", exact: true }).fill("Fox reading");
+  await page.evaluate(() => { window.__testHoldSave = true; });
   await page.getByRole("button", { name: "Save experiment", exact: true }).click();
+  await page.waitForFunction(() => !!window.__testReleaseSave);
+  await page.locator("#english-edit").fill("Later manual reading");
+  await page.evaluate(() => window.__testReleaseSave());
+  await page.waitForFunction(() => !document.querySelector("#source-input").disabled);
+  await page.getByRole("button", { name: "Experiments", exact: true }).click();
+  await page.getByRole("button", { name: "Open Fox reading", exact: true }).click();
+  const replaceDialog = page.getByRole("dialog", { name: "Open saved experiment?" });
+  assert.equal(await replaceDialog.isVisible(), true, "Finishing an earlier save must keep a later manual edit dirty.");
+  await replaceDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Workbench", exact: true }).click();
+  assert.equal(await page.locator("#english-edit").inputValue(), "Later manual reading");
   await page.getByRole("button", { name: "Experiments", exact: true }).click();
   await page.getByRole("heading", { name: "Fox reading", exact: true }).waitFor();
   assert.match(await page.locator(".experiment-problems").innerText(), /damaged/);
@@ -324,8 +345,39 @@ try {
   assert.equal(await page.locator("#passphrase").inputValue(), "", "Opening never restores a passphrase.");
   assert.match(await page.locator(".recipe-name").innerText(), /Phonetic/);
   assert.equal(await page.getByRole("group", { name: "Candidates for word 4 (fucc)" }).getByRole("button", { name: "Use fox for word 4" }).isDisabled(), true);
+  const openedCapture = await page.evaluate(() => window.__testLatestCapture);
+  const candidates = page.getByRole("group", { name: "Candidates for word 4 (fucc)" });
+  const decode = page.getByRole("button", { name: /Decode \/ suggest English/ });
+  assert.equal(await decode.isDisabled(), true);
+  await page.keyboard.press("Control+Enter");
+  assert.equal(await page.evaluate(() => window.__testLastEvaluation), undefined, "A shortcut with a missing key must not submit a run.");
+  await page.locator("#passphrase").fill("incorrect");
+  await decode.click();
+  await page.getByRole("status").filter({ hasText: "incorrect key" }).waitFor();
+  assert.equal(await page.evaluate(() => window.__testLastEvaluation.runId), openedCapture, "Rerunning a restored decode verifies the complete captured ciphertext.");
+  assert.equal(await page.locator("#source-input").inputValue(), "fixturecipher");
+  assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog");
+  assert.equal(await page.locator(".recipe-stage-details pre").textContent(), "fixtureintermediate");
+  assert.equal(await candidates.getByRole("button", { name: "Use fox for word 4" }).getAttribute("aria-pressed"), "true");
+  assert.equal(await page.getByRole("button", { name: /Reset word selections/ }).isVisible(), true);
+  assert.equal(await page.getByRole("button", { name: "Save experiment", exact: true }).isVisible(), true);
   await page.locator("#passphrase").fill("spectacular");
   assert.equal(await page.locator("#cipher-result").innerText(), "the quick brown fox jumps over the lazy dog", "Re-entering a passphrase retains saved inspection.");
+  await page.locator("#english-edit").fill("Manual reading before reset");
+  assert.equal(await page.getByRole("button", { name: "Save experiment", exact: true }).count(), 0);
+  await page.getByRole("button", { name: /Reset word selections/ }).click();
+  assert.equal(await page.evaluate(() => window.__testLastEvaluation.runId), openedCapture, "Reset after a manual edit still uses the restored capture.");
+  const resetCapture = await page.evaluate(() => window.__testLatestCapture);
+  assert.notEqual(resetCapture, openedCapture);
+  await page.locator("#english-edit").fill("Manual reading before selection");
+  await candidates.getByRole("button", { name: "Use fox for word 4" }).click();
+  assert.equal(await page.evaluate(() => window.__testLastEvaluation.runId), resetCapture, "Selection after a manual edit uses the last verified revision.");
+  const selectedCapture = await page.evaluate(() => window.__testLatestCapture);
+  await decode.click();
+  assert.equal(await page.evaluate(() => window.__testLastEvaluation.runId), selectedCapture);
+  const rerunCapture = await page.evaluate(() => window.__testLatestCapture);
+  await candidates.getByRole("button", { name: "Use fox for word 4" }).click();
+  assert.equal(await page.evaluate(() => window.__testLastEvaluation.runId), rerunCapture, "Selections after a restored rerun still use full verification.");
   await page.locator("#source-input").fill("my unsaved replacement");
   await page.getByRole("button", { name: "Experiments", exact: true }).click();
   await page.getByRole("button", { name: "Open Fox reading", exact: true }).click();

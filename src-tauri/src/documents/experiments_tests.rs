@@ -554,7 +554,7 @@ fn incomplete_directories_do_not_consume_the_completed_entry_limit() {
 }
 
 #[test]
-fn two_hundred_completed_entries_refuse_a_new_save_without_losing_entries() {
+fn independent_libraries_compete_for_the_last_slot_without_losing_entries() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("experiments");
     let library = Library::new(directory.clone());
@@ -565,7 +565,7 @@ fn two_hundred_completed_entries_refuse_a_new_save_without_losing_entries() {
         .save_text(&run.run_id, "Healthy", &Control::default())
         .unwrap();
     let bytes = fs::read(directory.join(&first.id).join("manifest.json")).unwrap();
-    for index in 1..200 {
+    for index in 1..199 {
         let id = format!("experiment-fixture-{index}");
         let path = directory.join(&id);
         fs::create_dir(&path).unwrap();
@@ -583,6 +583,30 @@ fn two_hundred_completed_entries_refuse_a_new_save_without_losing_entries() {
         )
         .unwrap();
     }
+    let second_library = Library::new(directory.clone());
+    let second = second_library
+        .evaluate(recipe(), "World".into(), "".into(), "encode".into(), vec![])
+        .unwrap();
+    let start = std::sync::Barrier::new(2);
+    let save = |library: &Library, run_id: &str| {
+        start.wait();
+        library.save_text(run_id, "Last slot", &Control::default())
+    };
+    let results = std::thread::scope(|scope| {
+        let other = scope.spawn(|| save(&second_library, &second.run_id));
+        [save(&library, &run.run_id), other.join().unwrap()]
+    });
+    let published: Vec<_> = results.iter().filter_map(|r| r.as_ref().ok()).collect();
+    assert_eq!(
+        published.len(),
+        1,
+        "Only one writer can publish: {results:?}"
+    );
+    assert!(
+        results
+            .iter()
+            .any(|r| r.as_ref().is_err_and(|e| e.contains("library is full")))
+    );
     assert!(
         library
             .save_text(&run.run_id, "Overflow", &Control::default())
@@ -590,7 +614,94 @@ fn two_hundred_completed_entries_refuse_a_new_save_without_losing_entries() {
     );
     let listing = library.list().unwrap();
     assert_eq!(listing.entries.len(), 200);
+    assert!(
+        listing
+            .entries
+            .iter()
+            .any(|entry| entry.id == published[0].id)
+    );
     assert!(listing.problems.is_empty());
+}
+
+#[test]
+fn restored_exact_text_decode_reruns_with_its_capture() {
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::new(root.path().join("experiments"));
+    let run = library
+        .evaluate(
+            recipe(),
+            "Khoor!".into(),
+            "".into(),
+            "decode".into(),
+            vec![],
+        )
+        .unwrap();
+    let saved = library
+        .save_text(&run.run_id, "Exact", &Control::default())
+        .unwrap();
+    let Opened::Text {
+        source,
+        run_id,
+        recipe,
+        ..
+    } = library
+        .open(
+            &saved.id,
+            &DocumentStore::new().unwrap(),
+            &Control::default(),
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    let repeated = library.revise(&run_id, &recipe, &source, "", &[]).unwrap();
+    assert!(repeated.result.exact);
+    assert_eq!(repeated.result.output, "Hello!");
+    assert_ne!(repeated.run_id, run_id);
+}
+
+#[cfg(windows)]
+#[test]
+fn ordinary_windows_long_library_path_round_trips() {
+    use std::{os::windows::ffi::OsStrExt, path::PathBuf};
+    // Start relative to this fixture's parent so the library receives an
+    // ordinary path even when the test runner uses a verbatim working directory.
+    let fixture = tempfile::tempdir_in(".").unwrap();
+    let mut directory = PathBuf::from(fixture.path().file_name().unwrap());
+    while directory.as_os_str().encode_wide().count() <= 260 {
+        directory.push("long-redirected-profile-component");
+    }
+    let library = Library::new(directory.clone());
+    let run = library
+        .evaluate(
+            recipe(),
+            "Hello!".into(),
+            "".into(),
+            "encode".into(),
+            vec![],
+        )
+        .unwrap();
+    let saved = library
+        .save_text(&run.run_id, "Long path", &Control::default())
+        .unwrap();
+    let library = Library::new(directory);
+    let listing = library.list().unwrap();
+    assert!(listing.problems.is_empty());
+    assert_eq!(listing.entries[0].id, saved.id);
+    let Opened::Text { source, result, .. } = library
+        .open(
+            &saved.id,
+            &DocumentStore::new().unwrap(),
+            &Control::default(),
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert_eq!(source, "Hello!");
+    assert_eq!(result.output, "Khoor!");
+    library.delete(&saved.id).unwrap();
+    assert!(library.list().unwrap().entries.is_empty());
 }
 
 #[cfg(unix)]

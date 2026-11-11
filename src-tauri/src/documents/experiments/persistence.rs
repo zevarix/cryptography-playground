@@ -35,7 +35,7 @@ fn regular_file(path: &Path) -> Result<(), String> {
     }
     Ok(())
 }
-pub(super) fn ensure_root(root: &Path) -> Result<(), String> {
+pub(super) fn ensure_root(root: &Path) -> Result<PathBuf, String> {
     if !root
         .try_exists()
         .map_err(|e| io_error("Cannot inspect experiment storage", e))?
@@ -51,7 +51,44 @@ pub(super) fn ensure_root(root: &Path) -> Result<(), String> {
             .create(root)
             .map_err(|e| io_error("Cannot create experiment storage", e))?;
     }
-    secure_directory(root)
+    secure_directory(root)?;
+    // Windows canonicalization supplies the extended absolute spelling needed
+    // by both tempfile's manifest publication and the directory's MoveFileExW.
+    #[cfg(windows)]
+    {
+        fs::canonicalize(root).map_err(|e| io_error("Cannot resolve experiment storage", e))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(root.to_owned())
+    }
+}
+
+pub(super) fn lock_for_save(root: &Path) -> Result<File, String> {
+    // Leave this empty app-owned file in place so all writers lock the same
+    // object. Closing the handle (including process exit) releases the lock.
+    let path = root.join(SAVE_LOCK);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = match options.open(&path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            regular_file(&path)?;
+            OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .map_err(|e| io_error("Cannot open experiment save lock", e))?
+        }
+        Err(error) => return Err(io_error("Cannot create experiment save lock", error)),
+    };
+    file.lock()
+        .map_err(|e| io_error("Cannot lock experiment library for saving", e))?;
+    Ok(file)
 }
 pub(super) fn secure_directory(path: &Path) -> Result<(), String> {
     regular_directory(path)?;

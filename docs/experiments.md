@@ -14,9 +14,9 @@ Saving is explicit. The app does not automatically retain experiment text. Appea
 
 Choose **Experiments**, then **Open** beside an entry. The notebook restores its saved input, recipe, stages, result and selected reading. The original source file and custom recipe do not need to remain available. The opened recipe is an independent editable copy; it does not replace a recipe in your recipe library.
 
-Opening clears the passphrase. You can inspect existing results and export a File result immediately. Re-enter any required passphrase before rerunning or changing candidate words. Further candidate choices are checked against the complete captured ciphertext. A speculative reading remains a compatible guess, not proof of the original wording.
+Opening clears the passphrase. You can inspect existing results and export a File result immediately. Re-enter any required passphrase before rerunning or changing candidate words. Rerunning a restored Text decode or choosing a different English reading checks the new result against the complete captured ciphertext. If verification fails, the notebook keeps its previous result and selections. A speculative reading remains a compatible guess, not proof of the original wording.
 
-Opening prompts before replacing unsaved notebook work. **Cancel** keeps the current notebook. A damaged or unsupported experiment reports an error and leaves the current work intact. The library lists readable entries even when another entry needs attention.
+Opening prompts before replacing unsaved notebook work, including a File source you opened but have not run. **Cancel** keeps the current notebook. A damaged or unsupported experiment reports an error and leaves the current work intact. The library lists readable entries even when another entry needs attention.
 
 ## Delete and storage
 

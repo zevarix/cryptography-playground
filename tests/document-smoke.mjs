@@ -195,9 +195,25 @@ try {
   await panel.getByRole("button", { name: "Save experiment", exact: true }).click();
   await panel.getByText("Saved “Document reading” in Experiments.", { exact: true }).waitFor();
   await page.reload({ waitUntil: "networkidle" });
+  // The untouched bundled recipe and source-only snapshot isolate File replacement.
+  await page.getByRole("button", { name: "File", exact: true }).click();
+  await page.getByRole("button", { name: "Open file", exact: true }).click();
+  await wait(".document-panel h1", "notes.md");
+  await ready();
+  await page.evaluate(() => { window.fileFixture.openError = true; }); // Original is no longer available.
+  await page.getByRole("button", { name: "Experiments", exact: true }).click();
+  await page.getByRole("button", { name: "Open Document reading", exact: true }).click();
+  const replaceDialog = page.getByRole("dialog", { name: "Open saved experiment?" });
+  assert.equal(await replaceDialog.isVisible(), true, "Opening a File experiment must confirm before discarding a source-only snapshot.");
+  await replaceDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.fileFixture.calls.filter(c => c.command === "doc_discard_document" || c.command === "open_experiment").length), 0);
+  await page.getByRole("button", { name: "Workbench", exact: true }).click();
+  await panel.getByRole("button", { name: "Next Source preview page", exact: true }).click();
+  await wait('[aria-label="Source preview text"]', "<script>");
   await page.evaluate(() => { window.fileFixture.holdExperimentOpen = true;window.fileFixture.dropDuringExperimentOpen = true; });
   await page.getByRole("button", { name: "Experiments", exact: true }).click();
   await page.getByRole("button", { name: "Open Document reading", exact: true }).click();
+  await replaceDialog.getByRole("button", { name: "Open experiment", exact: true }).click();
   await page.waitForFunction(() => !!window.fileFixture.releaseExperimentOpen);
   await page.evaluate(() => window.fileFixture.emit("document-drop", { token: "owned-loading-drop", name: "replacement.md" }));
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));

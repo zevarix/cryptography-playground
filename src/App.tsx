@@ -60,9 +60,8 @@ function App() {
   const [inputMode, setInputMode] = useState<"text" | "file">("text");
   const [fileState, setFileState] = useState<FilePanelState>({ busy: false, canRun: false, hasDocument: false });
   const fileActions = useRef<FilePanelActions | null>(null);
-  const [textRunId, setTextRunId] = useState<string | null>(null);
-  const [textDirty, setTextDirty] = useState(false);
-  const [restoredText, setRestoredText] = useState(false);
+  const [textSnapshot, setTextSnapshot] = useState<{ runId: string | null; dirty: boolean }>({ runId: null, dirty: false });
+  const [restoredRunId, setRestoredRunId] = useState<string | null>(null);
   const [experimentBusy, setExperimentBusyState] = useState(false);
   const experimentBusyRef = useRef(false);
   const [experimentRevision, setExperimentRevision] = useState(0);
@@ -115,12 +114,16 @@ function App() {
     return () => { current = false; };
   }, [activeRecipe]);
   const needsKey = recipeNeedsKey(activeRecipe);
+  const missingKey = needsKey && !passphrase.trim();
   const stages = activeRecipe?.steps.filter(step => step.enabled).map(step => ({
     title: labelForRule(step.rule),
     detail: RULE_CATALOG.find(entry => entry.type === step.rule.type)?.detail ?? "",
     reversible: !lossyRule(step.rule),
   })) ?? [];
   const source = direction === "encode" ? plaintext : ciphertext;
+  const canRun = !busy && !choosing && !experimentBusy && (inputMode === "file"
+    ? fileState.canRun
+    : !!activeRecipe && !!source.trim() && !missingKey && !fileState.busy);
   const isReversibleRecipe = stages.length > 0 && stages.every(stage => stage.reversible);
   const isExactDecode = direction === "decode" && isReversibleRecipe && exactOutput;
   const activeBaseline = activeRecipe && [...saved, ...builtins].find(recipe => recipe.id === activeRecipe.id);
@@ -145,7 +148,8 @@ function App() {
     setLockedChoices([]); setSelectedWord(null); setChoosing(false);
     setStageOutputs([]); setExactOutput(false);
     setDetail(""); setMessage("");
-    setTextRunId(null);setRestoredText(false);setTextDirty(true);
+    setTextSnapshot({ runId: null, dirty: true });
+    setRestoredRunId(null);
   }
   function applyResult(result: RecipeResult, mode: Direction) {
     setOutput(result.output);setReconstruction(result.reconstruction);setStageOutputs(result.stages);setExactOutput(result.exact);
@@ -158,7 +162,7 @@ function App() {
     if (openingExperiment.current || busy || choosing || fileState.busy || experimentBusyRef.current) return;
     openingExperiment.current = true;setExperimentBusy(true);
     try {
-      if (textDirty || fileState.hasUnsavedResult || activeIsUnsaved) {
+      if (textSnapshot.dirty || fileState.hasUnsavedResult || (entry.kind === "file" && fileState.hasDocument) || activeIsUnsaved) {
         setOpenPrompt(true);
         const accepted = await new Promise<boolean>(resolve => { confirmOpen.current = resolve; });
         if (!accepted) return;
@@ -166,12 +170,16 @@ function App() {
       const opened = await invoke<OpenedExperiment>("open_experiment", { id: entry.id });
       const recipe = copyRecipe(opened.kind === "text" ? opened.recipe : opened.job.recipe);
       recipe.id = newUserRecipe().id;
-      clearResults();setPassphrase("");setActiveRecipe(recipe);setTextDirty(false);
+      clearResults();setPassphrase("");setActiveRecipe(recipe);
       if (opened.kind === "text") {
         setInputMode("text");setDirection(opened.direction);
         if (opened.direction === "encode") setPlaintext(opened.source);else setCiphertext(opened.source);
-        applyResult(opened.result, opened.direction);setLockedChoices(opened.choices);setTextRunId(opened.runId);setRestoredText(true);
+        applyResult(opened.result, opened.direction);
+        setLockedChoices(opened.choices);
+        setTextSnapshot({ runId: opened.runId, dirty: false });
+        setRestoredRunId(opened.runId);
       } else {
+        setTextSnapshot({ runId: null, dirty: false });
         setInputMode("file");setDirection(opened.job.direction);
         fileActions.current?.restore(opened, recipe);
       }
@@ -179,17 +187,20 @@ function App() {
     } finally { openingExperiment.current = false;setExperimentBusy(false); }
   }
   async function run() {
-    if (experimentBusyRef.current) return;
+    if (!canRun || experimentBusyRef.current) return;
     if (inputMode === "file") { fileActions.current?.run();return; }
-    if (busy || choosing || fileState.busy || experimentBusy || !activeRecipe) return;
+    if (!activeRecipe) return;
     const operation = ++operationId.current;
     setBusy(true); setChoosing(false); setMessage("");
     try {
       const result = await invoke<RecipeResult & { runId: string }>("evaluate_recipe", {
         recipe: activeRecipe, text: source, key: passphrase, direction, choices: [],
+        ...(restoredRunId && direction === "decode" ? { runId: restoredRunId } : {}),
       });
       if (operation !== operationId.current) return;
-      applyResult(result, direction);setTextRunId(result.runId);setRestoredText(false);setTextDirty(true);
+      applyResult(result, direction);
+      setTextSnapshot({ runId: result.runId, dirty: true });
+      if (restoredRunId) setRestoredRunId(result.runId);
       setLockedChoices([]);setSelectedWord(null);
       setMessage(result.exact
         ? (direction === "encode" ? "Reversible recipe encoded." : "Decoded exactly.")
@@ -200,16 +211,19 @@ function App() {
             : "Recovered the surviving layer; no compatible English suggestion.");
     } catch (error) {
       if (operation !== operationId.current) return;
-      setOutput(""); setIntermediate(""); setReconstruction(null);
-      setStageOutputs([]); setExactOutput(false);
-      setDetail(""); setMessage(String(error));setTextRunId(null);
+      if (!restoredRunId) {
+        setOutput(""); setIntermediate(""); setReconstruction(null);
+        setStageOutputs([]); setExactOutput(false); setDetail("");
+        setTextSnapshot(current => ({ ...current, runId: null }));
+      }
+      setMessage(String(error));
     } finally {
       if (operation === operationId.current) setBusy(false);
     }
   }
 
   async function reviseChoices(next: WordChoice[], changed?: WordChoice) {
-    if (!reconstruction || !activeRecipe || direction !== "decode" || choosing || busy || experimentBusy || (needsKey && !passphrase.trim())) return;
+    if (!reconstruction || !activeRecipe || direction !== "decode" || choosing || busy || experimentBusy || missingKey) return;
     const operation = ++operationId.current;
     const previousOutput = output;
     const previousReconstruction = reconstruction;
@@ -226,7 +240,7 @@ function App() {
     try {
       const result = await invoke<RecipeResult & { runId: string }>("evaluate_recipe", {
         recipe: activeRecipe, text: ciphertext, key: passphrase, direction: "decode", choices: next,
-        runId: restoredText ? textRunId : null,
+        runId: restoredRunId,
       });
       if (operation !== operationId.current) return;
       if (!result.reconstruction?.suggested) throw new Error("No compatible English reconstruction was found.");
@@ -234,7 +248,9 @@ function App() {
       setOutput(result.reconstruction.suggested);
       setReconstruction(result.reconstruction);
       setStageOutputs(result.stages);
-      setLockedChoices(next);setTextRunId(result.runId);setTextDirty(true);
+      setLockedChoices(next);
+      setTextSnapshot({ runId: result.runId, dirty: true });
+      if (restoredRunId) setRestoredRunId(result.runId);
       setDetail(result.reconstruction.note);
       setInspected("ciphertext");
       setMessage(next.length
@@ -315,11 +331,11 @@ function App() {
               Unsaved draft
             </span>
           )}
-          <button className="top-run" onClick={() => void run()} disabled={experimentBusy || (inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || !source.trim() || (needsKey && !passphrase.trim()) || busy || choosing || fileState.busy)}>▶ {busy ? "Running" : fileState.busy ? "Working" : "Run"}</button>
+          <button className="top-run" onClick={() => void run()} disabled={!canRun}>▶ {busy ? "Running" : fileState.busy ? "Working" : "Run"}</button>
           <button onClick={() => setPage("appearance")} aria-label="Appearance settings" title="Appearance settings">⚙</button>
         </div>
       </header>
-      {openPrompt && <ExperimentDialog title="Open saved experiment?" confirmLabel="Open experiment" onConfirm={() => answerOpen(true)} onCancel={() => answerOpen(false)}><p>Opening replaces the notebook's current run and recipe. Cancel to save your current experiment first.</p></ExperimentDialog>}
+      {openPrompt && <ExperimentDialog title="Open saved experiment?" confirmLabel="Open experiment" onConfirm={() => answerOpen(true)} onCancel={() => answerOpen(false)}><p>Opening replaces the current notebook work and recipe. Choose Cancel to keep them.</p></ExperimentDialog>}
       <div className="app-flex">
         <nav className="icon-rail" aria-label="Primary navigation">
           <button title="Workbench" aria-label="Workbench" className={page === "workbench" ? "active" : ""} onClick={() => setPage("workbench")}>▤</button>
@@ -370,12 +386,12 @@ function App() {
               <div className="file-source-actions" hidden={inputMode !== "file"}><button type="button" disabled={busy || choosing || fileState.busy || experimentBusy} onClick={() => fileActions.current?.open()}>Open file</button><p className="helper-text">Drop a file into the app or choose a UTF-8 .txt or .md file.</p></div>
               <label className="input-caption" htmlFor="passphrase">Passphrase {needsKey ? "(required)" : "(unused)"}</label>
               <input disabled={experimentBusy} id="passphrase" value={passphrase} maxLength={64} spellCheck={false} autoComplete="off"
-                onChange={e => { setPassphrase(e.target.value); if (!restoredText || inputMode !== "text") clearResults(); }} />
-              {restoredText && inputMode === "text" && needsKey && <p className="helper-text">Saved result restored. Re-enter the passphrase to rerun or change word choices.</p>}
+                onChange={e => { setPassphrase(e.target.value); if (!restoredRunId || inputMode !== "text") clearResults(); }} />
+              {restoredRunId && inputMode === "text" && needsKey && <p className="helper-text">Saved result restored. Re-enter the passphrase to rerun or change word choices.</p>}
               <p className="helper-text">{needsKey
                 ? "The enabled keyed rules use this passphrase. Some rules derive parameters from the recipe configuration and key."
                 : "This recipe has no keyed rule; the passphrase is ignored."}</p>
-              <button className="sidebar-run" onClick={() => void run()} disabled={experimentBusy || (inputMode === "file" ? !fileState.canRun || busy || choosing : !activeRecipe || busy || choosing || fileState.busy || !source.trim() || (needsKey && !passphrase.trim()))}>▶ {inputMode === "file" ? "Run file recipe" : direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
+              <button className="sidebar-run" onClick={() => void run()} disabled={!canRun}>▶ {inputMode === "file" ? "Run file recipe" : direction === "encode" ? "Encode" : stages.every(s => s.reversible) ? "Decode exactly" : "Decode / suggest English"}</button>
               <div className="sidebar-note">
                 <strong>Experimental only</strong>
                 <p>{stages.some(s => !s.reversible)
@@ -426,7 +442,7 @@ function App() {
                                 aria-label={"Choose a different word for " + word.suggested + ", word " + (index + 1)}
                                 aria-expanded={selectedWord === index}
                                 onClick={() => setSelectedWord(selectedWord === index ? null : index)}
-                                disabled={choosing || busy || experimentBusy || (restoredText && needsKey && !passphrase.trim())} title={"Word " + (index + 1) + ": " + word.compatibleCount + " possible readings"}>
+                                disabled={choosing || busy || experimentBusy || missingKey} title={"Word " + (index + 1) + ": " + word.compatibleCount + " possible readings"}>
                                 {word.suggested}
                               </button>
                             ) : word.suggested}
@@ -451,7 +467,7 @@ function App() {
                               aria-pressed={reconstruction.words[selectedWord].suggested === candidate}
                               aria-label={"Use " + candidate + " for word " + (selectedWord + 1)}
                               onClick={() => chooseCandidate(selectedWord, candidate)}
-                              disabled={choosing || busy || experimentBusy || (restoredText && needsKey && !passphrase.trim())}>{candidate}</button>
+                              disabled={choosing || busy || experimentBusy || missingKey}>{candidate}</button>
                           ))}
                         </div>
                         <small>Selections are checked against the rest of the message.</small>
@@ -462,7 +478,7 @@ function App() {
                         <p className="reconstruction-warning">Click an underlined word in the English suggestion, or choose a candidate in the inspector. Each selection is checked against the full phonetic rotation; the original English still cannot be proven.</p>
                         <label htmlFor="english-edit" className="english-edit-label">Manual interpretation (candidate selections replace manual edits)</label>
                         <textarea id="english-edit" aria-label="Edit suggested English" value={output}
-                          onChange={event => { setOutput(event.target.value);setTextRunId(null);setTextDirty(true); }} spellCheck={true} rows={2}
+                          onChange={event => { setOutput(event.target.value);setTextSnapshot({ runId: null, dirty: true }); }} spellCheck={true} rows={2}
                           placeholder="Enter your preferred English interpretation..." />
                       </>
                     )}
@@ -477,11 +493,19 @@ function App() {
                     ))}
                   </details>
                 )}
-                {textRunId && <ExperimentSave target={{ kind: "text", runId: textRunId }} defaultName={activeRecipe?.name ?? "Text experiment"} disabled={busy || choosing || fileState.busy || experimentBusy} onBusy={setExperimentBusy} onSaved={() => { setTextDirty(false);setExperimentRevision(value => value + 1); }} />}
+                {textSnapshot.runId && <ExperimentSave
+                  target={{ kind: "text", runId: textSnapshot.runId }}
+                  defaultName={activeRecipe?.name ?? "Text experiment"}
+                  disabled={busy || choosing || fileState.busy || experimentBusy}
+                  onBusy={setExperimentBusy}
+                  onSaved={() => {
+                    setTextSnapshot(current => current === textSnapshot ? { ...current, dirty: false } : current);
+                    setExperimentRevision(value => value + 1);
+                  }} />}
                 <div className="notebook-actions">
                   <span>{choosing ? "Rechecking the selected words and subsequent rotations…" : (detail || "No run recorded")}</span>
                   {direction === "decode" && lockedChoices.length > 0 && (
-                    <button disabled={choosing || busy || experimentBusy || (restoredText && needsKey && !passphrase.trim())} onClick={() => void reviseChoices([])}>Reset word selections ({lockedChoices.length})</button>
+                    <button disabled={choosing || busy || experimentBusy || missingKey} onClick={() => void reviseChoices([])}>Reset word selections ({lockedChoices.length})</button>
                   )}
                   <button disabled={!output || choosing} onClick={() => void copy(output)}>
                     {direction === "decode" ? (isReversibleRecipe ? "Copy decoded text" : "Copy English suggestion") : "Copy result"}
@@ -544,7 +568,7 @@ function App() {
                             className={candidate === word.suggested ? "candidate-current" : ""}
                             aria-pressed={candidate === word.suggested}
                             aria-label={"Use " + candidate + " for word " + (index + 1)}
-                            disabled={busy || choosing || experimentBusy || (restoredText && needsKey && !passphrase.trim())}
+                            disabled={busy || choosing || experimentBusy || missingKey}
                             onClick={() => chooseCandidate(index, candidate)}>
                             {candidate}
                           </button>
