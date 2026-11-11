@@ -15,6 +15,27 @@ Built with Rust, Tauri 2, React, and TypeScript. **These experimental and histor
 
 A recipe fingerprint identifies its configuration. It is not a secret key, signature, or proof of authenticity.
 
+## Showcase
+
+Run a recipe and compare its output, character counts and letter frequencies.
+
+![Affine Substitution transforming sample text in the desktop workbench](docs/showcase/workbench.png)
+
+<details>
+<summary>Recipe editor and file workflow</summary>
+
+Configure ordered rules and parameters, then save an independent copy of a bundled recipe.
+
+![Recipe editor showing Affine Substitution parameters and its configuration fingerprint](docs/showcase/recipes.png)
+
+Process a UTF-8 document and save its result with recipe JSON, a fingerprint companion, or no companion.
+
+![Processed sample Markdown file with result preview and recipe companion choices](docs/showcase/files.png)
+
+</details>
+
+These native Intel Mac screenshots use bundled recipes and synthetic sample text.
+
 ## Reversible steps and lossy guesses
 
 Reversible legacy recipes decode supported ASCII input exactly. Version 2 recipes support UTF-8 documents, preserving case, punctuation, whitespace and non-ASCII text according to each rule. Rules that discard phonetic or spelling information cannot recover the original text uniquely.
@@ -58,6 +79,8 @@ npm run tauri build -- --no-bundle --no-sign -- --locked
 ```
 
 The desktop executable is written under `src-tauri/target/release/`. The frontend build alone is not the native application. Native testing has covered Windows and Intel macOS. Linux CI builds and smoke-tests the application on Ubuntu 24.04 x64. Apple Silicon has not been verified.
+
+[Build unsigned preview ZIPs](docs/preview-packages.md) with dependency notices, source manifests and SHA-256 checksums.
 
 ## Checks
 

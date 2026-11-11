@@ -12,11 +12,17 @@ DOC_FILES = {
 }
 
 
+# Curated README images; these are not compiled application inputs.
+DOC_IMAGES = {
+    "docs/showcase/workbench.png", "docs/showcase/recipes.png", "docs/showcase/files.png",
+}
+
 def needs_application_checks(paths: list[str] | None) -> bool:
     if paths is None:
         return True
     return any(
         path not in DOC_FILES
+        and path not in DOC_IMAGES
         and not (path.startswith("docs/") and path.endswith(".md"))
         and not (path.startswith(".github/ISSUE_TEMPLATE/") and path.endswith((".md", ".yml", ".yaml")))
         for path in paths

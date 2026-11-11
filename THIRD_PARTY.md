@@ -23,3 +23,5 @@ Document I/O uses [tauri-plugin-dialog 2.8.4](https://crates.io/crates/tauri-plu
 Before distributing installers or executables, assemble notices for the exact resolved runtime dependencies and include the bundled-data and palette notices in the distribution materials. A successful source build does not establish that binary-distribution review.
 
 Remaining binary-release checks are recorded in [docs/public-readiness.md](docs/public-readiness.md).
+
+Unsigned preview ZIPs are prepared with [the preview packaging helper](docs/preview-packages.md), which retains exact resolved dependency notices, standard-library terms, source archives and bundled-data/palette attribution. See [upstream notice provenance and qualifications](packaging/UPSTREAM-NOTICES.md) for omissions in published dependency packages and the evidence retained with previews.

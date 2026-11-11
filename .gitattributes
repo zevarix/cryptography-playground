@@ -1,2 +1,5 @@
 licenses/*.txt text eol=lf
 src-tauri/vendor/glib/** text eol=lf
+
+# Retained upstream notice bytes are hashed and must not be transformed.
+licenses/upstream/** -text

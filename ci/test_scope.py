@@ -12,6 +12,21 @@ class ScopeTests(unittest.TestCase):
             ".github/ISSUE_TEMPLATE/bug.yml",
         ]))
 
+    def test_curated_showcase_images_skip_application_checks(self):
+        self.assertFalse(needs_application_checks([
+            "README.md", "docs/showcase/workbench.png", "docs/showcase/recipes.png",
+            "docs/showcase/files.png",
+        ]))
+
+    def test_showcase_mixed_and_unknown_images_require_application_checks(self):
+        for paths in [
+            ["docs/showcase/files.png", "src/App.tsx"],
+            ["docs/showcase/new-image.png"], ["docs/unrelated.png"],
+            ["tools/preview_package.py"], ["packaging/notice-overrides.json"],
+        ]:
+            with self.subTest(paths=paths):
+                self.assertTrue(needs_application_checks(paths))
+
     def test_source_data_lockfiles_and_workflow_run_checks(self):
         for path in [
             "src/App.tsx", "src-tauri/src/engine.rs", "recipes/012.json",
