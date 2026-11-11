@@ -71,6 +71,18 @@ def checked_native_component(root, base, entry, target):
     return paths
 
 
+def source_reference(root, package, source_commit):
+    source = package.get("source")
+    if source == "registry+https://github.com/rust-lang/crates.io-index":
+        return "https://crates.io/crates/" + package["name"] + "/" + package["version"], []
+    base = Path(package["manifest_path"]).parent.resolve()
+    if (source is None and package["name"] == "glib" and package["version"] == "0.18.5"
+            and base == (root / "src-tauri/vendor/glib").resolve()):
+        return ("https://github.com/zevarix/cryptography-playground/tree/" + source_commit
+                + "/src-tauri/vendor/glib", [root / "src-tauri/vendor/README.md"])
+    raise ValueError("Unreviewed dependency source or path dependency: " + package["name"])
+
+
 def assemble(root, metadata, output, source_commit, target):
     output.mkdir(parents=True, exist_ok=False)
     policy = json.loads((root / "packaging/notice-overrides.json").read_text(encoding="utf-8"))
@@ -103,8 +115,10 @@ def assemble(root, metadata, output, source_commit, target):
         else:
             for path in license_files(base, package.get("license_file")):
                 files.append(copy(path, prefix + path.relative_to(base).as_posix()))
+        source_url, provenance = source_reference(root, package, source_commit)
+        files.extend(copy(path, prefix + "provenance/" + path.name) for path in provenance)
         record = {"ecosystem": "cargo", "name": name, "version": version,
-                  "license": package["license"], "source": "https://crates.io/crates/" + name + "/" + version,
+                  "license": package["license"], "source": source_url,
                   "notices": files}
         if "MPL-2.0" in package["license"] or (override and override.get("includeSource")):
             lock = next(p for p in locked if p["name"] == name and p["version"] == version

@@ -14,3 +14,9 @@ Preview packaging retains published notice bytes. A package without license text
 Original application code remains MIT. The selected MPL sources retain MPL-2.0; the ranking-data adaptation retains CC BY-SA 4.0. Standard-library notices come from the actual installed Rust toolchain's COPYRIGHT-library.html, including its embedded component terms.
 
 A generated notice inventory establishes what was retained, not a legal conclusion about every upstream component. Review these qualifications with the binary-release checklist before public distribution.
+
+Linux-only notice overrides:
+
+- dlopen2 0.8.2: retain the complete MIT LICENSE from [OpenByteDev/dlopen2 at cc80e4a0a90d499b677fdf7743699b4b3a43a989](https://github.com/OpenByteDev/dlopen2/blob/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE), blob d38093a7a564c64ad15e459f2e0a1f86a443c8b3.
+- libappindicator-sys 0.9.0: retain LICENSE-MIT and LICENSE-APACHE from [tauri-apps/libappindicator-rs at eafd1e3682a1247f595410266091e9684021cb6f](https://github.com/tauri-apps/libappindicator-rs/tree/eafd1e3682a1247f595410266091e9684021cb6f), blobs 50e79e21ccd1454f00695108ae01eaff9569689a and 16fe87b06e802f094b3fbb0894b137bca2b16ef1. Both crates omit complete notices in their published packages; each override checks the crate release revision and retained notice hashes.
+- The selected glib 0.18.5 is the project-local security backport, not an unmodified registry release. Its notice record points to the exact project revision and retains the vendor README, MIT LICENSE and COPYRIGHT. See [backport provenance](../src-tauri/vendor/README.md). Unknown path/dependency sources fail notice assembly.

@@ -5,6 +5,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      linux_preview:
+        description: Prepare and test an unsigned Debian preview
+        type: boolean
+        default: false
+      preview_label:
+        description: Preview version matching the application base version
+        type: string
+        default: 0.1.0-preview.1
 
 permissions:
   contents: read
@@ -136,6 +145,32 @@ jobs:
       - name: Check Rust with Clippy on Linux
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
       - name: Build native Linux application
+        if: github.event_name != 'workflow_dispatch' || !inputs.linux_preview
         run: npm run tauri build -- --debug --no-bundle --no-sign -- --locked
       - name: Smoke-test native Linux window
+        if: github.event_name != 'workflow_dispatch' || !inputs.linux_preview
         run: dbus-run-session -- xvfb-run -a python3 ci/linux_smoke.py
+      - name: Prepare unsigned Debian preview
+        if: github.event_name == 'workflow_dispatch' && inputs.linux_preview
+        env:
+          PREVIEW_LABEL: ${{ inputs.preview_label }}
+        run: |
+          rustup component add rust-docs
+          python3 -m tools.preview_linux --output .task-files/linux-preview --label "$PREVIEW_LABEL"
+      - name: Install and test the packaged Linux application
+        if: github.event_name == 'workflow_dispatch' && inputs.linux_preview
+        run: |
+          sudo apt-get install -y ./.task-files/linux-preview/*.deb
+          dpkg --compare-versions "$(dpkg-query -W -f='${Version}' cryptography-playground)" lt "$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          dbus-run-session -- xvfb-run -a python3 ci/linux_smoke.py --binary /usr/bin/cryptography-playground
+      - name: Upload reviewed-candidate Linux package
+        if: github.event_name == 'workflow_dispatch' && inputs.linux_preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-unsigned-preview
+          path: |
+            .task-files/linux-preview/*.deb
+            .task-files/linux-preview/*.deb.sha256
+            .task-files/linux-preview/*.deb.manifest.json
+          if-no-files-found: error
+          include-hidden-files: true
