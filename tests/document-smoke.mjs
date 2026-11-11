@@ -22,7 +22,7 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript(fixtures => {
     const clone = value => structuredClone(value);
-    const state = window.fileFixture = { calls: [], clipboard: [], next: 0, activities: {}, jobs: {}, callbacks: {}, listeners: {}, holdRun: false, saveCancel: false, saveError: false, openError: false };
+    const state = window.fileFixture = { calls: [], clipboard: [], next: 0, activities: {}, jobs: {}, callbacks: {}, listeners: {}, holdRun: false, savedRecipes: [], nextImportRecipe: null, saveCancel: false, saveError: false, openError: false };
     const fingerprint = async recipe => {
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([recipe.schemaVersion, recipe.steps])));
       const value = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
@@ -44,9 +44,9 @@ try {
         if (command === "plugin:event|listen") { const id = ++state.next; state.listeners[id] = args; return id; }
         if (command === "plugin:event|unlisten") { delete state.listeners[args.eventId]; return; }
         if (command === "builtin_recipes") return fixtures;
-        if (command === "list_saved_recipes") return [];
+        if (command === "list_saved_recipes") return clone(state.savedRecipes);
         if (command === "recipe_fingerprint") return fingerprint(args.recipe);
-        if (command === "save_recipe") return args.recipe;
+        if (command === "save_recipe") { if (!/^user-[a-zA-Z0-9-]+$/.test(args.recipe.id)) throw new Error("Invalid saved recipe ID."); state.savedRecipes = [clone(args.recipe), ...state.savedRecipes.filter(recipe => recipe.id !== args.recipe.id)]; return clone(args.recipe); }
         if (command === "doc_open" || command === "doc_open_drop") { if (state.openError) throw { message: "Invalid UTF-8 source." }; return clone(opened()); }
         if (command === "doc_activity") return clone(state.activities[args.id]);
         if (["doc_discard_activity", "doc_discard_document", "doc_discard_job"].includes(command)) return;
@@ -72,7 +72,7 @@ try {
           for (const recipe of fixtures) { const fp = await fingerprint(recipe); if ([fp.value, fp.display].includes(args.identifier)) return clone(recipe); }
           return null;
         }
-        if (command === "doc_import") { const recipe = clone(fixtures[12]); recipe.id = "imported-session"; recipe.name = "Imported document recipe"; return clone(finish({ kind: "imported", companion: { kind: "recipe", recipe } })); }
+        if (command === "doc_import") { const recipe = state.nextImportRecipe ? clone(state.nextImportRecipe) : { ...clone(fixtures[12]), id: "imported-session", name: "Imported document recipe" }; return clone(finish({ kind: "imported", companion: { kind: "recipe", recipe } })); }
         if (command === "doc_reconstruct") {
           if (args.choices.some(choice => choice.candidate === "fax")) throw { message: "Choice cannot re-encode the complete file." };
           return clone(finish({ kind: "reconstructed", reading: { id: "reading-" + ++state.next, jobId: args.jobId, words: "40", note: "Speculative reading verified by complete re-encoding." } }));
@@ -177,6 +177,41 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "File mode fits narrow windows.");
   await page.screenshot({ path: resolve(root, "test-artifacts/document-notebook-mobile.png"), fullPage: true });
+
+  // A companion identifies a portable configuration, not an existing local
+  // storage slot. Saving it must preserve a colliding saved recipe.
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  await page.locator("#recipe-name").fill("Original local recipe");
+  await page.getByRole("button", { name: "Save recipe", exact: true }).click();
+  await wait(".document-recipe-tools p", "^Original local recipe$");
+  const original = await page.evaluate(() => structuredClone(window.fileFixture.savedRecipes.find(recipe => recipe.name === "Original local recipe")));
+  assert.ok(original);
+  for (const [sourceId, name] of [[original.id, "Imported collision recipe"], ["portable-external", "Imported portable recipe"]]) {
+    const imported = { ...original, id: sourceId, name, steps: [{ enabled: true, rule: { type: "caesar", shift: 5 } }] };
+    const expectedFingerprint = await page.evaluate(async recipe => {
+      window.fileFixture.nextImportRecipe = recipe;
+      return window.__TAURI_INTERNALS__.invoke("recipe_fingerprint", { recipe });
+    }, imported);
+    await panel.locator("#file-recipe-identifier").fill("");
+    await panel.getByRole("button", { name: "Import recipe or fingerprint file", exact: true }).click();
+    await ready();
+    await wait(".document-recipe-tools p", name + ".*Unsaved recipe");
+    assert.deepEqual(await page.evaluate(id => window.fileFixture.savedRecipes.find(recipe => recipe.id === id), original.id), original, "Import alone preserves the saved recipe.");
+    await page.getByRole("button", { name: "Recipes", exact: true }).click();
+    await page.getByRole("button", { name: "Save recipe", exact: true }).click();
+    await wait(".document-recipe-tools p", "^" + name + "$");
+    const saved = await page.evaluate(() => structuredClone(window.fileFixture.savedRecipes));
+    assert.deepEqual(saved.find(recipe => recipe.id === original.id), original, "Saving a companion must never replace the original local recipe.");
+    const added = saved.find(recipe => recipe.name === name);
+    assert.ok(added, "The imported configuration is saved separately.");
+    assert.match(added.id, /^user-/);
+    assert.notEqual(added.id, sourceId, "Companion IDs must not become local storage identities.");
+    assert.deepEqual(added.steps, imported.steps);
+    await wait(".document-fingerprint", "^" + expectedFingerprint.display + "$");
+  }
+  assert.equal(await page.evaluate(() => window.fileFixture.savedRecipes.length), 3);
+
   assert.deepEqual(errors, []);
   console.log("PASS: file open/drop, UTF-8 selection, paging, copy, captured results, companions, cancellation, replacement, lookup/import and separate English reading");
 } finally { await browser?.close(); await server.close(); }

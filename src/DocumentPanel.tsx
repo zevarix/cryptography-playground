@@ -212,7 +212,11 @@ export default function DocumentPanel(props: Props) {
       const initial = await invoke<ActivityInfo | null>("doc_import", { expected: identifier });if (!initial) return;
       const result = await activity(operation, initial);
       if (operation.cancelled || result?.kind !== "imported") return;
-      if (result.companion.kind === "recipe") { await select(result.companion.recipe);announce("Imported recipe for this session. Save it to retain it."); }
+      if (result.companion.kind === "recipe") {
+        const recipe = copyRecipe(result.companion.recipe);
+        recipe.id = newUserRecipe().id;
+        await select(recipe);announce("Imported recipe for this session. Save it to retain it.");
+      }
       else { setIdentifier(result.companion.identifier);await lookup(result.companion.identifier); }
     } catch (error) { announce(failure(error)); } finally { end(operation); }
   }
