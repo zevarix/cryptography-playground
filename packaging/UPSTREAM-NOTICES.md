@@ -1,0 +1,14 @@
+# Upstream notice provenance
+
+Preview packaging retains published notice bytes. A package without license text fails preparation unless an exact-version override below supplies retained upstream evidence. Source archives retain their original registry checksum.
+
+- alloc-stdlib 0.3.0: BSD-3-Clause notice from [dropbox/rust-alloc-no-stdlib at 0a81fd6928ea3b33c8cd484aa4575d50ffb98012](https://github.com/dropbox/rust-alloc-no-stdlib/blob/0a81fd6928ea3b33c8cd484aa4575d50ffb98012/LICENSE), blob cd496ba72eb37e83a44958358d1f89a8a28cbc15.
+- selectors 0.38.0: its [published source notice](https://github.com/servo/stylo/blob/572ecba2d1600e7c3d490586692a209faf703baa/selectors/lib.rs) declares MPL-2.0. The full MPL text is retained from option-ext 0.2.0's published LICENSE (same declared license); the archive includes complete corresponding source for each selected MPL component.
+- The objc2 family publishes license declarations but omits full license files in these locked releases. The release declaration is retained from [d7d2fa23ceaa5e6096c923b081040e5d81b3b9df](https://github.com/madsmtm/objc2/blob/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md), blob 540ae4c81adb5f64a9f61e222b688880da24300e, which is identical at the release revisions listed in notice-overrides.json.
+- MIT is an available license for all selected objc2-family crates. The package retains the complete [current upstream MIT notice](https://github.com/madsmtm/objc2/blob/ee9a7ada2131f5944b8750428e265c15632f2a19/LICENSE-MIT.txt), blob ce8c4c17fd88f6cf5f3720c08fa685434e3cbcbb, and the [historical MIT notice](https://github.com/madsmtm/objc2/blob/757cd841d0293341dbefd9b99d7548dec244ffde/LICENSE.txt), blob e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad. Complete published source archives accompany these overrides.
+- [Upstream objc2 issue 826](https://github.com/madsmtm/objc2/issues/826) records uncertainty about historical contributor attribution. These retained notices preserve available upstream evidence; they do not assert that upstream's historical attribution review is resolved. The release declaration also retains its Apple SDK derivation qualification.
+- Palette notices retain the Gruvbox author's published MIT/X11 declaration and attribution. Upstream does not provide a standalone notice/year in that declaration; no year or holder is invented here.
+
+Original application code remains MIT. The selected MPL sources retain MPL-2.0; the ranking-data adaptation retains CC BY-SA 4.0. Standard-library notices come from the actual installed Rust toolchain's COPYRIGHT-library.html, including its embedded component terms.
+
+A generated notice inventory establishes what was retained, not a legal conclusion about every upstream component. Review these qualifications with the binary-release checklist before public distribution.

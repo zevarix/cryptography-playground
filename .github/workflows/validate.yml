@@ -33,6 +33,9 @@ jobs:
           CI_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           CI_HEAD: ${{ github.sha }}
         run: python ci/scope.py
+      - name: Test preview packaging helpers
+        if: steps.scope.outputs.application == 'true'
+        run: python -m unittest discover -s tests -p "test_preview*.py"
       - name: Select Node
         if: steps.scope.outputs.application == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
