@@ -79,7 +79,7 @@ impl ScalarReader<File> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct ArtifactStats {
     pub bytes: u64,
     pub scalars: u64,
@@ -144,4 +144,28 @@ impl ArtifactWriter {
             digest: digest_hex(&self.hash.finalize()),
         })
     }
+}
+
+/// Capture actual UTF-8 artifact contents at the completed-result boundary.
+pub(super) fn capture_stats(
+    path: &Path,
+    control: &super::Control,
+) -> Result<ArtifactStats, String> {
+    let mut reader = ScalarReader::open(path)?;
+    let mut hash = Sha256::new();
+    let mut scalars = 0_u64;
+    let mut buffer = [0_u8; 4];
+    while let Some(scalar) = reader.next()? {
+        hash.update(scalar.encode_utf8(&mut buffer).as_bytes());
+        scalars = scalars.checked_add(1).ok_or("Artifact length overflow.")?;
+        if scalars.is_multiple_of(4096) {
+            control.check()?;
+        }
+    }
+    control.check()?;
+    Ok(ArtifactStats {
+        bytes: reader.bytes,
+        scalars,
+        digest: digest_hex(&hash.finalize()),
+    })
 }

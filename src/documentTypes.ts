@@ -4,7 +4,7 @@ export type Direction = "encode" | "decode";
 export type Companion = "json" | "fingerprint" | "none";
 export type DocumentInfo = { id: string; name: string; encoding: "UTF-8"; bytes: string; digest: string; bom: boolean; legacyCompatible: boolean };
 export type Preview = { text: string; offset: string; nextOffset: string; bytes: string; eof: boolean };
-export type JobInfo = { id: string; documentId: string; state: "running" | "complete" | "failed" | "cancelled"; phase: string; processedBytes: string; totalBytes: string | null; recipe: Recipe; fingerprint: RecipeFingerprint; direction: Direction; exact: boolean; stages: Array<{ label: string; bytes: string; lossy: boolean }>; note: string };
+export type JobInfo = { id: string; documentId: string; state: "running" | "complete" | "failed" | "cancelled"; phase: string; processedBytes: string; totalBytes: string | null; recipe: Recipe; fingerprint: RecipeFingerprint; direction: Direction; exact: boolean; stages: Array<{ label: string; bytes: string; lossy: boolean }>; note: string; restored?: boolean };
 export type PublishedArtifact = { name: string; bytes: string; digest: string };
 export type SaveReceipt = { artifacts: PublishedArtifact[] };
 export type OperationError = { message: string; published: PublishedArtifact[]; unverified: string[] };
@@ -16,5 +16,5 @@ export type CandidatePage = { words: ReadingWord[]; nextOffset: string; eof: boo
 export type ActivityResult = { kind: "opened"; document: DocumentInfo } | { kind: "imported"; companion: ImportedCompanion } | { kind: "saved"; receipt: SaveReceipt } | { kind: "reconstructed"; reading: ReadingInfo };
 export type ActivityInfo = { id: string; state: "running" | "complete" | "failed" | "cancelled"; phase: string; processedBytes: string; totalBytes: string | null; result: ActivityResult | null; error: OperationError | null };
 export type DropNotice = { token: string; name: string };
-export type FilePanelState = { busy: boolean; canRun: boolean; hasDocument: boolean };
-export type FilePanelActions = { open: () => void; run: () => void };
+export type FilePanelState = { busy: boolean; canRun: boolean; hasDocument: boolean; hasUnsavedResult?: boolean };
+export type FilePanelActions = { open: () => void; run: () => void; restore: (experiment: import("./experimentTypes").OpenedFileExperiment, recipe: Recipe) => void };

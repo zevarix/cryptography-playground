@@ -20,7 +20,7 @@ use std::{
 };
 use tempfile::TempDir;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DocChoice {
     pub word_id: String,
@@ -48,6 +48,8 @@ pub(super) struct Reading {
     pub info: ReadingInfo,
     pub artifact: Artifact,
     pub candidates: PathBuf,
+    pub candidates_stats: super::stream::ArtifactStats,
+    pub choices: Vec<DocChoice>,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,10 +124,21 @@ fn pins(
     Ok(pins)
 }
 
+#[cfg(test)]
 pub fn run(
     store: &DocumentStore,
     job_id: &str,
     choices: &[DocChoice],
+    control: &Control,
+) -> Result<ReadingInfo, String> {
+    run_with_key(store, job_id, choices, None, control)
+}
+
+pub fn run_with_key(
+    store: &DocumentStore,
+    job_id: &str,
+    choices: &[DocChoice],
+    key: Option<&str>,
     control: &Control,
 ) -> Result<ReadingInfo, String> {
     control.check()?;
@@ -135,6 +148,14 @@ pub fn run(
     if !matches!(info.direction, Direction::Decode) || info.exact {
         return Err("English reconstruction requires a completed lossy decode.".into());
     }
+    let key = if info.restored {
+        crate::recipes::normalize_key(
+            &info.recipe,
+            key.ok_or("Re-enter the passphrase before changing a restored reading.")?,
+        )?
+    } else {
+        job.key.clone()
+    };
     let enabled: Vec<_> = info
         .recipe
         .steps
@@ -159,9 +180,7 @@ pub fn run(
         state.reconstructing = true;
     }
     let _admission = Admission(job.clone());
-    let root = tempfile::Builder::new()
-        .prefix("reading-")
-        .tempdir_in(job.root.path())
+    let root = super::private_tempdir("reading-", Some(job.root.path()))
         .map_err(|e| io_error("Cannot create private reading artifacts", e))?;
     let id = root
         .path()
@@ -184,7 +203,7 @@ pub fn run(
         document::search(
             &source.path,
             root.path(),
-            &job.key,
+            &key,
             &pins,
             control,
             |_, word| {
@@ -217,14 +236,22 @@ pub fn run(
         lossy: true,
     };
     control.begin("Re-encoding complete reading", None)?;
-    verify(&job, &info.recipe, &artifact, root.path(), control)?;
+    verify(&job, &info.recipe, &artifact, root.path(), &key, control)?;
     control.check()?;
+    builder
+        .candidates
+        .get_ref()
+        .sync_all()
+        .map_err(|e| io_error("Cannot flush completed candidate artifact", e))?;
+    let candidates_stats = super::stream::capture_stats(&candidates, control)?;
     let info = ReadingInfo { id, job_id: job_id.into(), words: words.to_string(), note: "Speculative dictionary reading, verified by re-encoding the complete document. This does not establish original wording, spelling or formatting.".into() };
     let reading = Arc::new(Reading {
         _root: root,
         info: info.clone(),
         artifact,
         candidates,
+        candidates_stats,
+        choices: choices.to_vec(),
     });
     job.state
         .lock()
@@ -353,23 +380,22 @@ fn verify(
     recipe: &crate::recipes::Recipe,
     reading: &Artifact,
     root: &Path,
+    key: &str,
     control: &Control,
 ) -> Result<(), String> {
-    let scratch = tempfile::Builder::new()
-        .prefix("verification-")
-        .tempdir_in(root)
+    let scratch = super::private_tempdir("verification-", Some(root))
         .map_err(|e| io_error("Cannot create reading verification artifacts", e))?;
     let mut current = reading.clone();
     for (index, step) in recipe.steps.iter().enumerate().filter(|(_, s)| s.enabled) {
         control.check()?;
-        let resolved = fingerprint::resolve(recipe, index, &step.rule, &job.key)?;
+        let resolved = fingerprint::resolve(recipe, index, &step.rule, key)?;
         let actual = resolved.as_ref().map_or(&step.rule, |(rule, _)| rule);
         let path = scratch.path().join(format!("stage-{index}"));
         let stats = transform::transform_known(
             actual,
             &current.path,
             &path,
-            &job.key,
+            key,
             false,
             control,
             Some(current.stats.scalars),

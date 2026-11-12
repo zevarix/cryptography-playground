@@ -1,4 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import ExperimentSave from "./ExperimentSave";
+import type { OpenedFileExperiment } from "./experimentTypes";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { copyRecipe, newUserRecipe, recipeNeedsKey, type Recipe, type RecipeFingerprint } from "./recipeTypes";
@@ -7,6 +9,8 @@ import type { ActivityInfo, ActivityResult, CandidatePage, Companion, DocChoice,
 type Props = {
   visible: boolean; actionsRef: Ref<FilePanelActions>; recipe: Recipe | null; fingerprint: RecipeFingerprint | null;
   builtins: Recipe[]; unsavedRecipe: boolean; passphrase: string; direction: "encode" | "decode";
+  experimentBusy: boolean; isExperimentBusy: () => boolean;
+  onExperimentSaved: () => void; onExperimentBusy: (value: boolean) => void;
   onRecipe: (recipe: Recipe) => void; onSaveRecipe: (recipe: Recipe) => Promise<Recipe>;
   onNotice: (text: string) => void; onOpenMode: () => void; onStateChange: (state: FilePanelState) => void;
 };
@@ -64,7 +68,9 @@ export default function DocumentPanel(props: Props) {
   const [identifier, setIdentifier] = useState("");
   const [missingRecipe, setMissingRecipe] = useState(false);
   const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [operationBusy, setBusy] = useState(false);
+  const [savingExperiment, setSavingExperiment] = useState(false);
+  const busy = operationBusy || savingExperiment || props.experimentBusy;
   const [progress, setProgress] = useState<{ phase: string; bytes: string; total: string | null } | null>(null);
   const pending = useRef<Pending | null>(null);
   const version = useRef(0);
@@ -87,7 +93,7 @@ export default function DocumentPanel(props: Props) {
     alive.current = true;
     let active = true;
     let stopDrop: (() => void) | undefined, stopError: (() => void) | undefined;
-    void listen<DropNotice>("document-drop", event => { if (active) { latest.current.onOpenMode();void openAction.current(event.payload.token); } })
+    void listen<DropNotice>("document-drop", event => { if (active) void openAction.current(event.payload.token); })
       .then(stop => { if (active) stopDrop = stop;else stop(); }).catch(() => {});
     void listen<string>("document-drop-error", event => { if (active) announce(event.payload); })
       .then(stop => { if (active) stopError = stop;else stop(); }).catch(() => {});
@@ -107,8 +113,19 @@ export default function DocumentPanel(props: Props) {
   useEffect(() => { if (confirmation && !dialog.current?.open) dialog.current?.showModal();if (!confirmation) dialog.current?.close(); }, [confirmation]);
   const validLegacy = !document || props.recipe?.schemaVersion === 2 || document.legacyCompatible;
   const canRun = !!document && !!props.recipe && !!props.fingerprint && validLegacy && !busy && (!recipeNeedsKey(props.recipe) || !!props.passphrase.trim());
-  useEffect(() => { props.onStateChange({ busy, canRun, hasDocument: !!document }); }, [busy, canRun, !!document, props.onStateChange]);
-  useImperativeHandle(props.actionsRef, () => ({ open: () => { void open(); }, run: () => { void run(); } }));
+  useEffect(() => { props.onStateChange({ busy, canRun, hasDocument: !!document, hasUnsavedResult: !!job && savedJob !== job.id }); }, [busy, canRun, !!document, job, savedJob, props.onStateChange]);
+  useImperativeHandle(props.actionsRef, () => ({ open: () => { void open(); }, run: () => { void run(); }, restore }));
+
+  function restore(opened: OpenedFileExperiment, recipe: Recipe) {
+    const previousJob = jobRef.current;const previousDocument = documentRef.current;
+    version.current += 1;documentRef.current = opened.document;jobRef.current = opened.job;
+    setDocument(opened.document);setJob(opened.job);setReading(opened.reading);setPins(opened.choices);
+    setSavedJob(opened.job.id);setSaveOutput("exact");setStage("result");setCompanion("json");
+    resultSignature.current = JSON.stringify([opened.document.id, recipe, opened.job.direction, ""]);
+    announce("Opened “" + opened.summary.name + "”. Results and stages are available; re-enter any required passphrase to continue.");
+    if (previousJob) void invoke("doc_discard_job", { id: previousJob.id }).catch(() => {});
+    if (previousDocument) void invoke("doc_discard_document", { id: previousDocument.id }).catch(() => {});
+  }
 
   function ask(kind: "result" | "recipe"): Promise<boolean> {
     if (confirmationRef.current) return Promise.resolve(false);
@@ -116,6 +133,7 @@ export default function DocumentPanel(props: Props) {
   }
   function answer(value: boolean) { const resolve = confirmationRef.current;confirmationRef.current = null;setConfirmation(null);resolve?.(value); }
   function begin(kind: Pending["kind"]): Pending | null {
+    if (latest.current.isExperimentBusy()) return null;
     if (pending.current) { announce("Wait for the current operation or cancel it first.");return null; }
     const operation = { kind, id: null, cancelled: false, version: version.current };
     pending.current = operation;setBusy(true);setProgress({ phase: kind === "save" ? "Choose a new filename" : "Starting…", bytes: "0", total: null });setNotice("");return operation;
@@ -139,7 +157,9 @@ export default function DocumentPanel(props: Props) {
     }
   }
   async function open(token?: string) {
+    if (latest.current.isExperimentBusy()) { announce("Wait for the experiment operation to finish before opening another file.");return; }
     if (pending.current) { announce("Cancel the current operation before opening another file.");return; }
+    latest.current.onOpenMode();
     if (jobRef.current && savedJob !== jobRef.current.id && !await ask("result")) return;
     const operation = begin("open");if (!operation) return;
     try {
@@ -189,7 +209,9 @@ export default function DocumentPanel(props: Props) {
     } catch (error) { announce(failure(error));return false; } finally { end(operation); }
   }
   async function select(recipe: Recipe) {
+    if (latest.current.isExperimentBusy()) return;
     if (latest.current.unsavedRecipe && !await ask("recipe")) return;
+    if (latest.current.isExperimentBusy()) return;
     latest.current.onRecipe(recipe);setMissingRecipe(false);
   }
   async function compatibleCopy() {
@@ -200,6 +222,7 @@ export default function DocumentPanel(props: Props) {
     await select(copy);announce("The UTF-8 copy has a new fingerprint. Save the recipe to keep it.");
   }
   async function lookup(value = identifier) {
+    if (latest.current.isExperimentBusy()) return;
     if (!value.trim()) return;
     try {
       const found = await invoke<Recipe | null>("resolve_recipe_identifier", { identifier: value });
@@ -224,7 +247,7 @@ export default function DocumentPanel(props: Props) {
     if (!job) return;
     const operation = begin("reading");if (!operation) return;
     try {
-      const initial = await invoke<ActivityInfo>("doc_reconstruct", { jobId: job.id, choices: next });
+      const initial = await invoke<ActivityInfo>("doc_reconstruct", { jobId: job.id, choices: next, key: job.restored ? props.passphrase : null });
       const result = await activity(operation, initial);
       if (result?.kind === "reconstructed" && jobRef.current?.id === result.reading.jobId && alive.current) { setReading(result.reading);setPins(next);setSavedJob(null);announce(result.reading.note); }
     } catch (error) { announce("Reading not applied: " + failure(error)); } finally { end(operation); }
@@ -269,11 +292,12 @@ export default function DocumentPanel(props: Props) {
       <p>{job.recipe.name} · <code>{job.fingerprint.display}</code></p>
       <label htmlFor="file-stage">Inspect a stage</label><select id="file-stage" value={stage} onChange={event => setStage(event.target.value)}><option value="result">{resultTitle}</option>{job.stages.map((item, index) => <option key={index} value={index}>{item.label}</option>)}</select>
       {selectedTarget && <PagedText key={job.id + ":" + stage} title="Result preview" target={selectedTarget} />}
-      {job.direction === "decode" && !job.exact && <div className="document-actions"><button type="button" disabled={busy} onClick={() => void reconstruct()}>Suggest an English reading</button>{pins.length > 0 && <button type="button" disabled={busy} onClick={() => void reconstruct([])}>Reset word choices</button>}</div>}
-      {reading && <section aria-label="Speculative English reading"><h2>Speculative English reading</h2><p>{reading.note}</p><PagedText key={reading.id} title="English preview" target={{ documentId: null, jobId: job.id, readingId: reading.id, stage: null }} /><Candidates key={reading.id} jobId={job.id} reading={reading} pins={pins} busy={busy} onChoose={(wordId, candidate) => void reconstruct([...pins.filter(pin => pin.wordId !== wordId), { wordId, candidate }])} /></section>}
+      {job.direction === "decode" && !job.exact && <div className="document-actions"><button type="button" disabled={busy || (!!job.restored && recipeNeedsKey(job.recipe) && !props.passphrase.trim())} onClick={() => void reconstruct()}>Suggest an English reading</button>{pins.length > 0 && <button type="button" disabled={busy || (!!job.restored && recipeNeedsKey(job.recipe) && !props.passphrase.trim())} onClick={() => void reconstruct([])}>Reset word choices</button>}</div>}
+      {reading && <section aria-label="Speculative English reading"><h2>Speculative English reading</h2><p>{reading.note}</p><PagedText key={reading.id + ":preview"} title="English preview" target={{ documentId: null, jobId: job.id, readingId: reading.id, stage: null }} /><Candidates key={reading.id + ":candidates"} jobId={job.id} reading={reading} pins={pins} busy={busy} canChoose={!job.restored || !recipeNeedsKey(job.recipe) || !!props.passphrase.trim()} onChoose={(wordId, candidate) => void reconstruct([...pins.filter(pin => pin.wordId !== wordId), { wordId, candidate }])} /></section>}
       <fieldset className="document-companions" disabled={busy}><legend>Recipe companion</legend>{([ ["json", "Recipe JSON"], ["fingerprint", "Fingerprint text instead of JSON"], ["none", "No companion"] ] as const).map(([value, label]) => <label key={value}><input type="radio" name="file-companion" value={value} checked={companion === value} onChange={() => setCompanion(value)} />{label}</label>)}</fieldset>
       <p>A fingerprint finds a recipe already in the library. JSON carries the complete recipe. Keep the passphrase separately.</p>
       {reading && <><label htmlFor="file-save-output">Result to save</label><select id="file-save-output" value={saveOutput} onChange={event => setSaveOutput(event.target.value as "exact" | "reading")}><option value="exact">{resultTitle}</option><option value="reading">Speculative English reading</option></select></>}
+      <ExperimentSave target={{ kind: "file", jobId: job.id, readingId: reading?.id ?? null }} defaultName={job.recipe.name + " · " + document?.name} disabled={busy} onBusy={value => { setSavingExperiment(value);props.onExperimentBusy(value); }} onSaved={() => { setSavedJob(job.id);props.onExperimentSaved(); }} />
       <button type="button" className="document-save" disabled={busy} onClick={() => void save()}>Save As…</button>
     </section>}
     <dialog ref={dialog} className="document-confirm" onCancel={event => { event.preventDefault();answer(false); }}>
@@ -284,14 +308,14 @@ export default function DocumentPanel(props: Props) {
   </article>;
 }
 
-function Candidates({ jobId, reading, pins, busy, onChoose }: { jobId: string; reading: ReadingInfo; pins: DocChoice[]; busy: boolean; onChoose: (id: string, candidate: string) => void }) {
+function Candidates({ jobId, reading, pins, busy, canChoose, onChoose }: { jobId: string; reading: ReadingInfo; pins: DocChoice[]; busy: boolean; canChoose: boolean; onChoose: (id: string, candidate: string) => void }) {
   const [offsets, setOffsets] = useState(["0"]);const [page, setPage] = useState<CandidatePage | null>(null);const [error, setError] = useState("");
   useEffect(() => { setOffsets(["0"]);setPage(null); }, [reading.id]);
   const offset = offsets[offsets.length - 1];
   useEffect(() => { let current = true;setError("");void invoke<CandidatePage>("doc_candidate_page", { jobId, readingId: reading.id, offset }).then(value => { if (current) setPage(value); }).catch(error => { if (current) setError(failure(error)); });return () => { current = false; }; }, [jobId, reading.id, offset]);
   return <section className="document-candidates" aria-label="English word choices">
     {error && <p role="alert">{error}</p>}
-    {page?.words.map(word => <div key={word.wordId} className="document-word"><strong>Word {(BigInt(word.wordId.slice(word.wordId.lastIndexOf(":") + 1)) + 1n).toString()}: {word.transformed}</strong><div className="document-actions">{Array.from(new Set([word.suggested, ...word.alternatives])).map(candidate => <button type="button" key={candidate} disabled={busy} aria-pressed={pins.some(pin => pin.wordId === word.wordId && pin.candidate === candidate)} onClick={() => onChoose(word.wordId, candidate)}>{candidate}</button>)}</div><span>{word.compatibleCount} compatible candidates</span></div>)}
+    {page?.words.map(word => <div key={word.wordId} className="document-word"><strong>Word {(BigInt(word.wordId.slice(word.wordId.lastIndexOf(":") + 1)) + 1n).toString()}: {word.transformed}</strong><div className="document-actions">{Array.from(new Set([word.suggested, ...word.alternatives])).map(candidate => <button type="button" key={candidate} disabled={busy || !canChoose} aria-pressed={pins.some(pin => pin.wordId === word.wordId && pin.candidate === candidate)} onClick={() => onChoose(word.wordId, candidate)}>{candidate}</button>)}</div><span>{word.compatibleCount} compatible candidates</span></div>)}
     <div className="document-paging"><button type="button" disabled={busy || offsets.length === 1} onClick={() => setOffsets(values => values.slice(0, -1))}>Previous words</button><button type="button" disabled={busy || !page || page.eof} onClick={() => { if (page) setOffsets(values => [...values, page.nextOffset]); }}>Next words</button></div>
   </section>;
 }

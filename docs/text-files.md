@@ -9,7 +9,7 @@ The file workflow runs locally in the desktop app. These experimental ciphers ar
 3. Inspect the source, result or individual stages. Preview pages are bounded; the recipe runs on the complete document. Changing the selected recipe, direction or passphrase marks an older result as previous. Saving that result uses its captured recipe.
 4. Use **Cancel operation** to stop work. A failed or cancelled run leaves the last completed result available. Opening a replacement or rerunning with changed settings prompts before discarding an unsaved result.
 
-The app captures a private temporary copy after opening and checks source identity and metadata during capture. Later edits to the source do not alter an admitted run. Temporary copies, stage files and readings are removed with their session; they are not persistent experiment history or guaranteed secure deletion.
+The app captures a private temporary copy after opening and checks source identity and metadata during capture. Later edits to the source do not alter an admitted run. Temporary copies, stage files and readings are removed with their session; they are not guaranteed secure deletion. **Save experiment** explicitly retains a separate persistent copy of the captured input, completed stages and selected reading in the local [experiment library](experiments.md).
 
 ## Save results and companions
 

@@ -4,6 +4,19 @@ A desktop notebook for composing toy ciphers, inspecting each transformation, an
 
 Built with Rust, Tauri 2, React, and TypeScript. **These experimental and historical ciphers are for puzzles and learning, not for protecting sensitive information.**
 
+## Download the preview
+
+[Download Preview 2 for Windows, Intel Mac, Ubuntu, or experimental Apple Silicon](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.2), with the saved experiment library, platform instructions and SHA-256 checksums.
+
+- **Windows x64:** extract the portable ZIP with its notices directory. Requires Microsoft Evergreen WebView2 Runtime.
+- **Intel macOS:** extract the ZIP containing the unsigned, unnotarized app. Tested on macOS 15.8.1; follow the release's per-app opening guidance if needed.
+- **Ubuntu 24.04 x64:** install the unsigned Debian package using the release instructions. GTK/WebKit dependencies are supplied by apt.
+- **Apple Silicon, experimental:** extract the unnotarized ZIP. Compilation and package-integrity checks passed; opening and using it on Apple Silicon hardware remains unverified.
+
+Apple Silicon runtime behavior, older macOS versions, and other Linux distributions or architectures have not been verified. Windows, Intel Mac and Ubuntu packages are unsigned. The Apple Silicon executable retains only the compiler's ad-hoc signature. Mac downloads have no publisher signature or notarization. SHA-256 checksums verify download integrity, not publisher identity.
+
+[Preview 1 remains available](https://github.com/zevarix/cryptography-playground/releases/tag/v0.1.0-preview.1) as an older release; it predates the saved experiment library included in all Preview 2 packages.
+
 ## What you can do
 
 - Build recipes from configurable rules, enable or reorder steps, and inspect intermediate text.
@@ -11,6 +24,7 @@ Built with Rust, Tauri 2, React, and TypeScript. **These experimental and histor
 - Combine phonetic rotation, consonant skeletons, word mirroring, vowel rotation, and positional shifts with Caesar/ROT13, Vigenere, Beaufort, Affine, Atbash, and Rail Fence.
 - Compare recipe configurations using a reproducible `CRYPT-R1-...` or `CRYPT-R2-...` fingerprint. Optional derived rules choose parameters from the configuration and runtime passphrase.
 - Open UTF-8 `.txt` and `.md` files, inspect bounded previews, and save new results with an optional recipe JSON or fingerprint companion.
+- Save named experiments locally and reopen their input, result, stages and selected reading after restarting. Passphrases stay separate.
 - Customize the notebook's light/dark appearance, theme, accent, colors, and font.
 
 A recipe fingerprint identifies its configuration. It is not a secret key, signature, or proof of authenticity.
@@ -48,8 +62,9 @@ Recipe 001 uses the Carnegie Mellon Pronouncing Dictionary. Unsupported words fa
 
 Use the **Recipes** panel to create or duplicate a recipe, configure its rules, then save it. Unsaved edits are marked and are lost when the app restarts. Saved custom recipes live in a `recipes` directory under Tauri's app-data directory. Appearance preferences are stored in the local WebView.
 
-Copy JSON to share a recipe, or import a pasted/selected JSON file. Passphrases are not included in recipe JSON. In **File** mode, native **Save As** creates new files without replacing the original or an existing destination. File results and intermediate stages are temporary and disappear when the app closes; save results you want to keep.
+Copy JSON to share a recipe, or import a pasted/selected JSON file. Passphrases are not included in recipe JSON. In **File** mode, native **Save As** creates new files without replacing the original or an existing destination. File results and intermediate stages are temporary unless you explicitly save an experiment. Use **Save experiment** to retain a complete run in the local **Experiments** library, or **Save As** to export a result file.
 
+- [Saving and reopening experiments](docs/experiments.md)
 - [Opening files, saving results and recipe companions](docs/text-files.md)
 - [Recipe format and all bundled examples](docs/recipe-format.md)
 - [Fingerprint and derived-parameter specification](docs/recipe-fingerprints.md)
@@ -80,7 +95,7 @@ npm run tauri build -- --no-bundle --no-sign -- --locked
 
 The desktop executable is written under `src-tauri/target/release/`. The frontend build alone is not the native application. Native testing has covered Windows and Intel macOS. Linux CI builds and smoke-tests the application on Ubuntu 24.04 x64. Apple Silicon has not been verified.
 
-[Build unsigned preview ZIPs](docs/preview-packages.md) with dependency notices, source manifests and SHA-256 checksums.
+[Build unsigned preview ZIPs or a Linux Debian package](docs/preview-packages.md) with dependency notices, source manifests and SHA-256 checksums.
 
 ## Checks
 

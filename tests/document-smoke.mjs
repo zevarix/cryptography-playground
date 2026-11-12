@@ -22,7 +22,7 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript(fixtures => {
     const clone = value => structuredClone(value);
-    const state = window.fileFixture = { calls: [], clipboard: [], next: 0, activities: {}, jobs: {}, callbacks: {}, listeners: {}, holdRun: false, savedRecipes: [], nextImportRecipe: null, saveCancel: false, saveError: false, openError: false };
+    const state = window.fileFixture = { calls: [], clipboard: [], next: 0, activities: {}, jobs: {}, callbacks: {}, listeners: {}, holdRun: false, readings: {}, experiments: JSON.parse(localStorage.getItem("file-experiments") ?? "[]"), savedRecipes: [], nextImportRecipe: null, saveCancel: false, saveError: false, openError: false };
     const fingerprint = async recipe => {
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([recipe.schemaVersion, recipe.steps])));
       const value = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
@@ -73,9 +73,31 @@ try {
           return null;
         }
         if (command === "doc_import") { const recipe = state.nextImportRecipe ? clone(state.nextImportRecipe) : { ...clone(fixtures[12]), id: "imported-session", name: "Imported document recipe" }; return clone(finish({ kind: "imported", companion: { kind: "recipe", recipe } })); }
+        if (command === "list_experiments") return { entries: state.experiments.map(value => value.summary), problems: [] };
+        if (command === "save_file_experiment") {
+          if (Object.keys(args).sort().join(",") !== "jobId,name,readingId") throw new Error("Only captured job/reading references may be saved.");
+          const job = clone(state.jobs[args.jobId]);
+          const reading = args.readingId ? clone(state.readings[args.readingId]) : null;
+          const summary = { id: "experiment-" + ++state.next, name: args.name, kind: "file", recipeName: job.recipe.name, createdAt: "1794432000" };
+          state.experiments.push({ summary, job, reading });localStorage.setItem("file-experiments", JSON.stringify(state.experiments));return summary;
+        }
+        if (command === "open_experiment") {
+          if (state.dropDuringExperimentOpen) state.emit("document-drop", { token: "owned-immediate-loading-drop", name: "replacement.md" });
+          if (state.holdExperimentOpen) await new Promise(resolve => { state.releaseExperimentOpen = resolve; });
+          const saved = state.experiments.find(value => value.summary.id === args.id);
+          const id = "job-restored-" + ++state.next;
+          const document = { id: "document-restored-" + ++state.next, name: "notes.md", encoding: "UTF-8", bytes: "16449", digest: "a".repeat(64), bom: true, legacyCompatible: false };
+          const job = { ...clone(saved.job), id, documentId: document.id, restored: true };
+          state.jobs[id] = job;
+          const reading = saved.reading ? { ...saved.reading.info, id: "reading-restored-" + ++state.next, jobId: id } : null;
+          const choices = (saved.reading?.choices ?? []).map(choice => ({ ...choice, wordId: id + ":" + choice.wordId.split(":").at(-1) }));
+          return { kind: "file", summary: saved.summary, document, job, reading, choices };
+        }
         if (command === "doc_reconstruct") {
           if (args.choices.some(choice => choice.candidate === "fax")) throw { message: "Choice cannot re-encode the complete file." };
-          return clone(finish({ kind: "reconstructed", reading: { id: "reading-" + ++state.next, jobId: args.jobId, words: "40", note: "Speculative reading verified by complete re-encoding." } }));
+          const reading = { id: "reading-" + ++state.next, jobId: args.jobId, words: "40", note: "Speculative reading verified by complete re-encoding." };
+          state.readings[reading.id] = { info: clone(reading), choices: clone(args.choices) };
+          return clone(finish({ kind: "reconstructed", reading }));
         }
         if (command === "doc_candidate_page") return { words: [{ wordId: args.jobId + ":" + (args.offset === "0" ? "0" : "32"), transformed: "fx", suggested: "fox", alternatives: ["fix", "fax"], compatibleCount: 3 }], nextOffset: "32", eof: args.offset !== "0" };
         throw new Error("Unexpected native command: " + command);
@@ -168,7 +190,48 @@ try {
   await panel.locator("#file-save-output").selectOption("reading");
   await panel.getByRole("button", { name: "Save As…", exact: true }).click(); await ready();
   assert.equal(await page.evaluate(() => window.fileFixture.calls.filter(c => c.command === "doc_save").at(-1).args.readingId), readingId);
-  // A failed drop leaves the usable result and snapshot in place.
+  await panel.getByRole("button", { name: "fix", exact: true }).click();await ready();
+  await panel.getByRole("textbox", { name: "Experiment name", exact: true }).fill("Document reading");
+  await panel.getByRole("button", { name: "Save experiment", exact: true }).click();
+  await panel.getByText("Saved “Document reading” in Experiments.", { exact: true }).waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  // The untouched bundled recipe and source-only snapshot isolate File replacement.
+  await page.getByRole("button", { name: "File", exact: true }).click();
+  await page.getByRole("button", { name: "Open file", exact: true }).click();
+  await wait(".document-panel h1", "notes.md");
+  await ready();
+  await page.evaluate(() => { window.fileFixture.openError = true; }); // Original is no longer available.
+  await page.getByRole("button", { name: "Experiments", exact: true }).click();
+  await page.getByRole("button", { name: "Open Document reading", exact: true }).click();
+  const replaceDialog = page.getByRole("dialog", { name: "Open saved experiment?" });
+  assert.equal(await replaceDialog.isVisible(), true, "Opening a File experiment must confirm before discarding a source-only snapshot.");
+  await replaceDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.fileFixture.calls.filter(c => c.command === "doc_discard_document" || c.command === "open_experiment").length), 0);
+  await page.getByRole("button", { name: "Workbench", exact: true }).click();
+  await panel.getByRole("button", { name: "Next Source preview page", exact: true }).click();
+  await wait('[aria-label="Source preview text"]', "<script>");
+  await page.evaluate(() => { window.fileFixture.holdExperimentOpen = true;window.fileFixture.dropDuringExperimentOpen = true; });
+  await page.getByRole("button", { name: "Experiments", exact: true }).click();
+  await page.getByRole("button", { name: "Open Document reading", exact: true }).click();
+  await replaceDialog.getByRole("button", { name: "Open experiment", exact: true }).click();
+  await page.waitForFunction(() => !!window.fileFixture.releaseExperimentOpen);
+  await page.evaluate(() => window.fileFixture.emit("document-drop", { token: "owned-loading-drop", name: "replacement.md" }));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => window.fileFixture.calls.filter(call => call.command === "doc_open_drop").length), 0, "A native drop cannot start another file open while an experiment is loading.");
+  assert.equal(await page.getByRole("heading", { name: "Experiments", exact: true }).isVisible(), true, "A rejected drop preserves library navigation.");
+  await page.evaluate(() => { window.fileFixture.holdExperimentOpen = false;window.fileFixture.dropDuringExperimentOpen = false;window.fileFixture.releaseExperimentOpen(); });
+  await wait(".document-panel h1", "notes.md");
+  assert.equal(await panel.locator(".document-result").count(), 1, "The saved result remains restored after the rejected concurrent drop.");
+  assert.equal(await page.locator("#passphrase").inputValue(), "");
+  assert.equal(await panel.getByRole("button", { name: "Suggest an English reading", exact: true }).isDisabled(), true);
+  assert.equal(await panel.getByLabel("English preview text", { exact: true }).innerText(), "the quick brown fox");
+  await panel.getByRole("button", { name: "Next words", exact: true }).click();await wait(".document-word strong", "Word 33");
+  assert.equal(await panel.getByRole("button", { name: "fix", exact: true }).getAttribute("aria-pressed"), "true");
+  await page.locator("#passphrase").fill("spectacular");
+  await panel.getByRole("button", { name: "fox", exact: true }).click();await ready();
+  assert.equal(await page.evaluate(() => window.fileFixture.calls.filter(call => call.command === "doc_reconstruct").at(-1).args.key), "spectacular");
+  await panel.getByRole("button", { name: "Save As…", exact: true }).click();await ready();
+    // A failed drop leaves the usable result and snapshot in place.
   await page.evaluate(() => { window.fileFixture.openError = true; window.fileFixture.emit("document-drop", { token: "owned-drop", name: "bad.md" }); });
   await wait(".document-notice", "Invalid UTF-8");
   assert.equal(await panel.locator(".document-result").count(), 1);

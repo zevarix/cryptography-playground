@@ -193,8 +193,9 @@ pub fn doc_reconstruct(
     documents: State<'_, AppDocuments>,
     job_id: String,
     choices: Vec<super::reconstruct::DocChoice>,
+    key: Option<String>,
 ) -> Result<ActivityInfo, String> {
-    documents.reconstruct(job_id, choices)
+    documents.reconstruct_with_key(job_id, choices, key)
 }
 
 #[tauri::command]
