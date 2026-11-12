@@ -579,7 +579,8 @@ function App() {
                 </div>
               )}
                 <div className="inspector-block"><h3>Reversibility</h3>
-                  <p>{exactOutput ? (activeRecipe?.schemaVersion === 2 ? "All enabled rules reverse exactly on UTF-8 text." : "All enabled rules reverse exactly on supported ASCII input.")
+                  <p>{stages.length === 0 ? "Enable at least one rule to inspect reversibility."
+                    : isReversibleRecipe ? (activeRecipe?.schemaVersion === 2 ? "All enabled rules reverse exactly on UTF-8 text." : "All enabled rules reverse exactly on supported ASCII input.")
                     : "This recipe contains a lossy rule. Any English suggestion is speculative, even when its encoding matches."}</p>
                 </div>
             </aside>

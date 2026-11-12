@@ -148,6 +148,38 @@ try {
   assert.equal(await page.title(), "Cryptography Playground");
   assert.match(await page.locator("h1:visible").innerText(), /Experiment: Phonetic Rotation/);
   const initialSource = await page.locator("#source-input").inputValue();
+  const reversibility = page.locator(".inspector-block").filter({
+    has: page.getByRole("heading", { name: "Reversibility", exact: true }),
+  }).locator("p");
+  assert.match(await reversibility.innerText(), /contains a lossy rule/);
+  for (const [name, explanation] of [
+    ["Word Mirror", "All enabled rules reverse exactly on supported ASCII input."],
+    ["UTF-8 document", "All enabled rules reverse exactly on UTF-8 text."],
+  ]) {
+    await page.getByRole("button", { name: "Recipes", exact: true }).click();
+    await page.getByRole("button", { name: new RegExp(name) }).click();
+    await page.getByRole("button", { name: "Use in workbench" }).click();
+    assert.equal(await reversibility.innerText(), explanation,
+      "Reversibility must describe the selected recipe before any run.");
+    await page.locator("#source-input").fill(initialSource + "!");
+    assert.equal(await reversibility.innerText(), explanation,
+      "Editing the input must not turn a reversible recipe into a lossy one.");
+    await page.locator("#source-input").fill(initialSource);
+  }
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  await page.getByRole("button", { name: /Phonetic Rotation/ }).click();
+  await page.getByRole("checkbox", { name: "Enable rule 1", exact: true }).uncheck();
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  assert.equal(await reversibility.innerText(), "All enabled rules reverse exactly on supported ASCII input.",
+    "A disabled lossy rule must not affect the selected recipe's reversibility.");
+  await page.getByRole("button", { name: "Edit rules", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Enable rule 2", exact: true }).uncheck();
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  assert.equal(await reversibility.innerText(), "Enable at least one rule to inspect reversibility.");
+  await page.getByRole("button", { name: "Recipes", exact: true }).click();
+  await page.getByRole("button", { name: /Phonetic Rotation/ }).click();
+  await page.getByRole("button", { name: "Use in workbench" }).click();
+  assert.match(await reversibility.innerText(), /contains a lossy rule/);
   await page.locator("#source-input").fill("   ");
   assert.equal(await page.locator(".top-run").isDisabled(), true);
   await page.keyboard.press("Control+Enter");
@@ -197,6 +229,10 @@ try {
   await page.locator("#passphrase").fill("lemon");
   await page.getByRole("button", { name: /Encode/ }).click();
   assert.equal(await page.locator("#cipher-result").innerText(), "pairfixture");
+  await page.locator("#source-input").fill(initialSource + "!");
+  assert.equal(await reversibility.innerText(), "All enabled rules reverse exactly on supported ASCII input.",
+    "Clearing a previous run must preserve the current recipe's reversibility explanation.");
+  await page.locator("#source-input").fill(initialSource);
   await page.getByRole("button", { name: "Recipes", exact: true }).click();
   await page.getByRole("button", { name: /Vigenere/ }).click();
   assert.equal(await page.locator("#rule-0").inputValue(), "vigenere");
